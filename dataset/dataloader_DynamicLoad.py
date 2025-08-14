@@ -8,6 +8,8 @@ import warnings
 from batchgenerators.transforms.spatial_transforms import SpatialTransform_2, MirrorTransform
 from torch.utils.data import DataLoader
 
+from .f2fd import get_f2fd_pair
+
 
 class Dataset_ClsBased(data.Dataset):
     def __init__(self,
