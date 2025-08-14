@@ -98,6 +98,9 @@ class BaseOptions():
         self.parser.add_argument('--batch_size', help='batch size', type=int, default=32)
         self.parser.add_argument('--val_batch_size', help='batch size', type=int, default=0)
         self.parser.add_argument('--max_epoch', help='number of epochs', type=int, default=100)
+        self.parser.add_argument('--check_val_every_n_epoch', type=int, default=1, help='check validation every n epochs')
+
+        
         self.parser.add_argument('--loss_func_seg', help='seg loss function type', type=str, default='Dice')
         self.parser.add_argument('--loss_func_dn', help='denoising loss function type', type=str, default='MSE')
         self.parser.add_argument('--loss_func_paf', help='paf loss function type', type=str, default='MSE')

@@ -352,32 +352,33 @@ def train_func(args, stdout=None):
     runner = Trainer(min_epochs=min(50, args.max_epoch),
                      max_epochs=args.max_epoch,
                      logger=tb_logger,
-                     gpus=args.gpu_id,
+                     gpus=-1,
                      checkpoint_callback=checkpoint_callback,
                      callbacks=[lr_monitor],
-                     accelerator='dp',
+                     accelerator='ddp',
                      precision=32,
-                     profiler=True,
+                     #profiler=True,
                      sync_batchnorm=True,
-                     resume_from_checkpoint=args.checkpoints)
+                     resume_from_checkpoint=args.checkpoints,
+                     num_sanity_val_steps=0,
+                     check_val_every_n_epoch=args.check_val_every_n_epoch,
+                    )
 
 
-    try:
-        runner.fit(model)
-        print('*' * 100)
-        print('Training Finished')
-        print(f'Training pid:{os.getpid()}')
-        print('*' * 100)
-        torch.cuda.empty_cache()
-        if stdout is not None:
-            sys.stderr = save_stderr
-            sys.stdout = save_stdout
-        return os.getpid()
-    except:
-        torch.cuda.empty_cache()
-        if stdout is not None:
-            stdout.flush()
-            stdout.write('Training Exception!')
-            sys.stderr = save_stderr
-            sys.stdout = save_stdout
-        return os.getpid()
+    runner.fit(model)
+    print('*' * 100)
+    print('Training Finished')
+    print(f'Training pid:{os.getpid()}')
+    print('*' * 100)
+    torch.cuda.empty_cache()
+    if stdout is not None:
+        sys.stderr = save_stderr
+        sys.stdout = save_stdout
+    return os.getpid()
+        # torch.cuda.empty_cache()
+        # if stdout is not None:
+        #     stdout.flush()
+        #     stdout.write('Training Exception!')
+        #     sys.stderr = save_stderr
+        #     sys.stdout = save_stdout
+        # return os.getpid()

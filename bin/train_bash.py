@@ -44,6 +44,7 @@ if __name__ == '__main__':
     args.pad_size = [cfg['padding_size']]
     args.learning_rate = cfg['lr']
     args.max_epoch = cfg['max_epochs']
+    args.check_val_every_n_epoch = cfg['check_val_every_n_epoch']
     args.threshold = cfg['seg_thresh']
     args.gpu_id = [int(i) for i in cfg['gpu_ids'].split(',')]
     args.configs = args.train_configs
