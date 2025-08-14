@@ -17,6 +17,7 @@ if __name__ == '__main__':
     options = option.BaseOptions()
     args = options.gather_options()
 
+
     # cofig
     with open(args.train_configs, 'r') as f:
         cfg = json.loads(''.join(f.readlines()).lstrip('train_configs='))
@@ -43,6 +44,7 @@ if __name__ == '__main__':
     args.val_block_size = args.block_size
     args.pad_size = [cfg['padding_size']]
     args.learning_rate = cfg['lr']
+    args.scheduler = cfg['scheduler']
     args.max_epoch = cfg['max_epochs']
     args.check_val_every_n_epoch = cfg['check_val_every_n_epoch']
     args.threshold = cfg['seg_thresh']
@@ -75,6 +77,5 @@ if __name__ == '__main__':
 
     for k, v in sorted(vars(args).items()):
         print(k, '=', v)
-
     # Training
     train.train_func(args, stdout=None)

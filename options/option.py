@@ -47,6 +47,7 @@ class BaseOptions():
                                  # choices=['unet', 'UMC', 'ResUnet', 'DoubleUnet', 'MFNet', 'DMFNet', 'DMFNet_down3',
                                  #          'NestUnet', 'VoxResNet', 'HighRes3DNet', 'HRNetv1']
                                  )
+        self.parser.add_argument('--resume_from_checkpoint', default=None)
         self.parser.add_argument('--in_channels', help='input channels of the network', type=int, default=1)
         self.parser.add_argument('--f_maps', nargs='+', type=int, help="Feature numbers of ResUnet")
         self.parser.add_argument('--use_LAM', type=str2bool, help='whether use LAM', default=False)

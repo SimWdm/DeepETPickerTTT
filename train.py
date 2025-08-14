@@ -313,7 +313,7 @@ class UNetExperiment(pl.LightningModule):
                 "frequency": 1
             }
 
-        if args.scheduler is None:
+        if args.scheduler is None or args.scheduler == 'None':
             return [optimizer]
         else:
             return [optimizer], [lr_dict]
@@ -359,7 +359,7 @@ def train_func(args, stdout=None):
                      precision=32,
                      #profiler=True,
                      sync_batchnorm=True,
-                     resume_from_checkpoint=args.checkpoints,
+                     resume_from_checkpoint=args.resume_from_checkpoint,
                      num_sanity_val_steps=0,
                      check_val_every_n_epoch=args.check_val_every_n_epoch,
                     )

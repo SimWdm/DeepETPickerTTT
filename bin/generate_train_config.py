@@ -30,10 +30,12 @@ if __name__ == "__main__":
     train_config['patch_size'] = args.block_size
     train_config['padding_size'] = args.pad_size[0]
     train_config['lr'] = args.learning_rate
+    train_config['scheduler'] = args.scheduler
     train_config['max_epochs'] = args.max_epoch
     train_config['check_val_every_n_epoch'] = args.check_val_every_n_epoch
     train_config['seg_thresh'] = args.threshold
     train_config['gpu_ids'] = ','.join([str(i) for i in args.gpu_id])
+    train_config['resume_from_checkpoint'] = args.resume_from_checkpoint
     print(train_config['gpu_ids'])
 
 
