@@ -93,6 +93,7 @@ class BaseOptions():
         self.parser.add_argument('--gau_thresh', type=float, default=0.5)
         self.parser.add_argument('--use_lw', type=str2bool, help='whether use lightweight', default=False)
         self.parser.add_argument('--lw_kernel', type=int, default=3)
+        self.parser.add_argument('--denoising', type=str2bool, help='whether use denoising', default=False)
 
         # training hyper-parameters
         self.parser.add_argument('--learning_rate', type=float, default=5e-5)

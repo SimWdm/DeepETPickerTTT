@@ -33,7 +33,7 @@ def normalization(planes, norm='bn'):
 # Residual 3D UNet
 class ResidualUNet3D(nn.Module):
     def __init__(self, f_maps=[32, 64, 128, 256], in_channels=1, out_channels=13,
-                 args=None, use_att=False, use_paf=None, use_uncert=None):
+                 args=None, use_att=False, use_paf=None, use_uncert=None, denoising=False):
         super(ResidualUNet3D, self).__init__()
         if use_att:
             norm = BatchNorm3d
@@ -49,7 +49,13 @@ class ResidualUNet3D(nn.Module):
         self.use_tanh = args.use_tanh
         self.use_IP = args.use_IP
         self.out_channels = out_channels
-        if self.out_channels > 1:
+        self.denoising = denoising
+        
+        self.segmentation_channels = out_channels
+        if self.denoising:
+            self.segmentation_channels -= 1
+            
+        if self.segmentation_channels > 1:
             self.use_softmax = args.use_softmax
         else:
             self.use_sigmoid = args.use_sigmoid
@@ -171,7 +177,12 @@ class ResidualUNet3D(nn.Module):
 
         out = self.final_conv(x)
 
-        if self.out_channels > 1:
+        if self.denoising:
+            denoising_out = out[:, -1, :, :, :].unsqueeze(1)
+            out = out[:, :-1, :, :, :]
+
+        # check if more than 1 classification channel
+        if self.segmentation_channels > 1:
             if self.use_softmax:
                 out = torch.softmax(out, dim=1)
             elif self.pif_sigmoid:
@@ -188,6 +199,9 @@ class ResidualUNet3D(nn.Module):
             paf_out = self.paf_conv(x)
             if self.paf_sigmoid:
                 paf_out = torch.sigmoid(paf_out)
+
+        if self.denoising:
+            out = torch.cat((out, denoising_out), dim=1)
 
         if self.se_loss:
             return [out, se_out]

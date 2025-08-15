@@ -55,6 +55,8 @@ if __name__ == '__main__':
     args.val_set_ids = cfg['val_set_ids']
     args.num_classes = train_cls_num
 
+    args.denoising = cfg.get('denoising', False)
+
     train_list = []
     for item in args.train_set_ids.split(','):
         if '-' in item:

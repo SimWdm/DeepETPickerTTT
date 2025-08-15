@@ -36,6 +36,7 @@ if __name__ == "__main__":
     train_config['seg_thresh'] = args.threshold
     train_config['gpu_ids'] = ','.join([str(i) for i in args.gpu_id])
     train_config['resume_from_checkpoint'] = args.resume_from_checkpoint
+    train_config['denoising'] = args.denoising  
     print(train_config['gpu_ids'])
 
 
