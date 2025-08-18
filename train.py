@@ -197,18 +197,7 @@ class UNetExperiment(pl.LightningModule):
                         img_denoising = img_denoising * 0.5 + 0.5  # [0, 1]
                         img_denoising = make_grid(img_denoising, (args.block_size - 1) // 5 + 1, padding=2, pad_value=120)
                         tensorboard.add_image('img_denoising', img_denoising, self.current_epoch, dataformats="CHW")
-                        # add batch['img_odd'] and batch['img_even'] to tensorboard
-                        img_odd = val_batch['img_odd'][0, :, 0:(args.block_size - 1):5, :, :].permute(1, 0, 2, 3).repeat((1, 3, 1, 1))
-                        img_odd = img_odd * 0.5 + 0.5  # [0, 1]
-                        img_odd = make_grid(img_odd, (args.block_size - 1) // 5 + 1, padding=2, pad_value=120)
-                        tensorboard.add_image('img_odd', img_odd, self.current_epoch, dataformats="CHW")
-                        img_even = val_batch['img_even'][0, :, 0:(args.block_size - 1):5, :, :].permute(1, 0, 2, 3).repeat((1, 3, 1, 1))
-                        img_even = img_even * 0.5 + 0.5  # [0, 1]
-                        img_even = make_grid(img_even, (args.block_size - 1) // 5 + 1, padding=2, pad_value=120)
-                        tensorboard.add_image('img_even', img_even, self.current_epoch, dataformats="CHW")
                     
-                    
-
             if args.num_classes > 1:
                 return self._nms_v2(self.seg_output[:, 1:], kernel=args.meanPool_kernel, mp_num=6, positions=index)
             else:
