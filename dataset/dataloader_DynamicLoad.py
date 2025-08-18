@@ -27,6 +27,7 @@ class Dataset_ClsBased(data.Dataset):
 
         self.args = args
         self.mode = mode
+                
         # use_CL CL = cnotrastive learning
         self.use_CL = args.use_CL
         if args.use_CL:
@@ -39,6 +40,7 @@ class Dataset_ClsBased(data.Dataset):
         self.use_bg_part = args.use_bg_part
         self.use_ice_part = args.use_ice_part
         self.Sel_Referance = args.Sel_Referance
+        self.denoising = args.denoising
 
         pad_size = pad_size[0] if isinstance(pad_size, list) else pad_size
         base_dir = cfg['base_path']
@@ -502,6 +504,11 @@ class Dataset_ClsBased(data.Dataset):
 
         img = torch.as_tensor(img).float()
         label = torch.as_tensor(label).float()
+        out = {
+            "img": img,
+            "label": label,
+            "position": position
+        }
 
         if self.use_bg_part and self.Sel_Referance:
             idx, x, y, z = self.coords_bg[index]
@@ -538,13 +545,31 @@ class Dataset_ClsBased(data.Dataset):
             img_ice = np.array(img_ice).reshape(-1, self.shift * 2, self.shift * 2, self.shift * 2)
             img_ice = torch.as_tensor(img_ice).float()
 
-        if self.use_bg_part and self.Sel_Referance:
-            if self.use_ice_part:
-                return img, img_bg, img_ice
-            else:
-                return img, img_bg, position
-        else:
-            return img, label, position
+        if self.denoising:
+            img_even, img_odd = get_f2fd_pair(img.squeeze().numpy())
+            img_even = torch.from_numpy(img_even).float().unsqueeze(0)
+            img_odd = torch.from_numpy(img_odd).float().unsqueeze(0)
+            out['img_even'] = img_even
+            out['img_odd'] = img_odd
+        
+        if self.use_paf:
+            # raise depracted error
+            raise NotImplementedError("'use_paf' is not supported yet.")
+        if self.use_bg_part:
+            raise NotImplementedError("'use_bg_part' part is not supported yet.")
+        if self.use_ice_part:
+            raise NotImplementedError("'use_ice_part' part is not supported yet.")
+        if self.Sel_Referance:
+            raise NotImplementedError("'Sel_Referance' part is not supported yet.")
+        return out
+        
+        # if self.use_bg_part and self.Sel_Referance:
+        #     if self.use_ice_part:
+        #         return img, img_bg, img_ice
+        #     else:
+        #         return img, img_bg, position
+        # else:
+        #     return img, label, position
 
     def __len__(self):
         return max(len(self.coords), len(self.data))

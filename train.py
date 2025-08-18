@@ -13,6 +13,7 @@ from pytorch_lightning import loggers
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from utils.loss import DiceLoss
 from utils.metrics import seg_metrics
+from utils.cc_loss import CCLoss3D
 from utils.colors import COLORS
 from model.model_loader import get_model
 from utils.misc import combine, cal_metrics_NMS_OneCls, get_centroids, cal_metrics_MultiCls, combine_torch
@@ -56,6 +57,8 @@ class UNetExperiment(pl.LightningModule):
 
         if args.loss_func_seg == 'Dice':
             self.loss_function_seg = DiceLoss(args=args)
+        if args.denoising:
+            self.loss_function_denoising = CCLoss3D(reduction="mean")
 
         if 'gaussian' in self.val_cfg["label_type"]:
             self.thresholds = np.linspace(0.15, 0.45, 7)
@@ -66,12 +69,30 @@ class UNetExperiment(pl.LightningModule):
 
     def forward(self, x):
         return self.model(x)
+    
+    def get_denoising_loss(self, batch, return_denoising_output=False):
+        img_even, img_odd = batch['img_even'], batch['img_odd']
+        denoising_output = self.forward(img_even)[:, -1, :, :, :].unsqueeze(1)
+        loss_denoising = self.loss_function_denoising(denoising_output, img_odd)
+        if return_denoising_output:
+            return loss_denoising, denoising_output
+        else:
+            return loss_denoising
+    
+    
+    def get_segmentation_output(self, img):
+        seg_output = self.forward(img)
+        if self.args.denoising:
+            seg_output = seg_output[:, :-1, :, :, :]
+        return seg_output
 
     def training_step(self, train_batch, batch_idx):
         args = self.args
-        img, label, index = train_batch
+        #img, label, index = train_batch
+        img, label = train_batch['img'], train_batch['label']
         img = img.to(torch.float32)
-        seg_output = self.forward(img)
+        seg_output = self.get_segmentation_output(img)
+        
         if args.use_mask:
             mask = label.clone().detach()
             mask[mask > 0] = 1
@@ -85,24 +106,43 @@ class UNetExperiment(pl.LightningModule):
 
             seg_output = seg_output * mask
         loss_seg = self.loss_function_seg(seg_output, label)
-        self.log('train_loss', loss_seg, on_step=False, on_epoch=True)
-        return loss_seg
+        train_loss = loss_seg
+        
+        if args.denoising:
+            loss_denoising = self.get_denoising_loss(train_batch)
+            train_loss = (train_loss + loss_denoising) / 2
+            #train_loss = loss_denoising
+            
+        self.log('train_loss', train_loss, on_step=False, on_epoch=True)
+        if args.denoising:
+            self.log('train_loss_seg', loss_seg, on_step=False, on_epoch=True)
+            self.log('train_loss_denoising', loss_denoising, on_step=False, on_epoch=True)
+            
+        return train_loss
 
     def validation_step(self, val_batch, batch_idx):
         args = self.args
         with torch.no_grad():
-            img, label, index = val_batch
+            #img, label, index = val_batch
+            img, label, index = val_batch['img'], val_batch['label'], val_batch['position']
             index = torch.cat([i.view(1, -1) for i in index], dim=0).permute(1, 0)
             img = img.to(torch.float32)
-            self.seg_output = self.forward(img)
+            self.seg_output = self.get_segmentation_output(img)
 
             if (batch_idx >= self.len_block // args.batch_size and args.test_mode == "test_val") or \
                     args.test_mode == "test" or args.test_mode == "val" or args.test_mode == "val_v1":
                 loss_seg = self.loss_function_seg(self.seg_output, label)
-
+                val_loss = loss_seg
+                if args.denoising:
+                    loss_denoising, output_denoising = self.get_denoising_loss(val_batch, return_denoising_output=True)
+                    val_loss = (val_loss + loss_denoising) / 2
+                    
                 precision, recall, f1_score, iou = seg_metrics(self.seg_output, label, threshold=args.threshold)
 
-                self.log('val_loss', loss_seg, on_step=False, on_epoch=True)
+                self.log('val_loss', val_loss, on_step=False, on_epoch=True)
+                if args.denoising:
+                    self.log('val_loss_seg', loss_seg, on_step=False, on_epoch=True)
+                    self.log('val_loss_denoising', loss_denoising, on_step=False, on_epoch=True)
                 self.log('val_precision', precision, on_step=False, on_epoch=True)
                 self.log('val_recall', recall, on_step=False, on_epoch=True)
                 self.log('val_f1', f1_score, on_step=False, on_epoch=True)
@@ -151,6 +191,23 @@ class UNetExperiment(pl.LightningModule):
                     img_label_seg = make_grid(img_label_seg, (args.block_size - 1) // 5 + 1, padding=2, pad_value=120)
 
                     tensorboard.add_image('img_label_seg', img_label_seg, self.current_epoch, dataformats="CHW")
+                    
+                    if args.denoising:
+                        img_denoising = output_denoising[0, :, 0:(args.block_size - 1):5, :, :].permute(1, 0, 2, 3).repeat((1, 3, 1, 1))
+                        img_denoising = img_denoising * 0.5 + 0.5  # [0, 1]
+                        img_denoising = make_grid(img_denoising, (args.block_size - 1) // 5 + 1, padding=2, pad_value=120)
+                        tensorboard.add_image('img_denoising', img_denoising, self.current_epoch, dataformats="CHW")
+                        # add batch['img_odd'] and batch['img_even'] to tensorboard
+                        img_odd = val_batch['img_odd'][0, :, 0:(args.block_size - 1):5, :, :].permute(1, 0, 2, 3).repeat((1, 3, 1, 1))
+                        img_odd = img_odd * 0.5 + 0.5  # [0, 1]
+                        img_odd = make_grid(img_odd, (args.block_size - 1) // 5 + 1, padding=2, pad_value=120)
+                        tensorboard.add_image('img_odd', img_odd, self.current_epoch, dataformats="CHW")
+                        img_even = val_batch['img_even'][0, :, 0:(args.block_size - 1):5, :, :].permute(1, 0, 2, 3).repeat((1, 3, 1, 1))
+                        img_even = img_even * 0.5 + 0.5  # [0, 1]
+                        img_even = make_grid(img_even, (args.block_size - 1) // 5 + 1, padding=2, pad_value=120)
+                        tensorboard.add_image('img_even', img_even, self.current_epoch, dataformats="CHW")
+                    
+                    
 
             if args.num_classes > 1:
                 return self._nms_v2(self.seg_output[:, 1:], kernel=args.meanPool_kernel, mp_num=6, positions=index)
@@ -360,10 +417,9 @@ def train_func(args, stdout=None):
                      #profiler=True,
                      sync_batchnorm=True,
                      resume_from_checkpoint=args.resume_from_checkpoint,
-                     num_sanity_val_steps=0,
+                     num_sanity_val_steps=2,
                      check_val_every_n_epoch=args.check_val_every_n_epoch,
                     )
-
 
     runner.fit(model)
     print('*' * 100)
