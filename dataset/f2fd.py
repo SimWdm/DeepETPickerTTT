@@ -1,3 +1,4 @@
+#%%
 import random
 import torch
 import numpy as np
@@ -6,7 +7,7 @@ import numpy as np
 def get_f2fd_pair(vol, bernoulli_mask_ratio=0.5, bernoulli_mask_patch_size=8, phase_inversion_ratio=0.1, min_mask_radius=0.05, max_mask_radius=0.1):
     vol_fft = np.fft.rfftn(vol)
     vol_fft = np.fft.fftshift(vol_fft, axes=(-3, -2))
-    vol_1 = _get_f2fd_vol(
+    vol_1_fft = _get_f2fd_vol_fft(
         vol_fft=vol_fft,
         bernoulli_mask_ratio=bernoulli_mask_ratio,
         bernoulli_mask_patch_size=bernoulli_mask_patch_size,
@@ -14,7 +15,7 @@ def get_f2fd_pair(vol, bernoulli_mask_ratio=0.5, bernoulli_mask_patch_size=8, ph
         min_mask_radius=min_mask_radius,
         max_mask_radius=max_mask_radius
     )
-    vol_2 = _get_f2fd_vol(
+    vol_2_fft = _get_f2fd_vol_fft(
         vol_fft=vol_fft,
         bernoulli_mask_ratio=bernoulli_mask_ratio,
         bernoulli_mask_patch_size=bernoulli_mask_patch_size,
@@ -22,10 +23,12 @@ def get_f2fd_pair(vol, bernoulli_mask_ratio=0.5, bernoulli_mask_patch_size=8, ph
         min_mask_radius=min_mask_radius,
         max_mask_radius=max_mask_radius
     )
+    vol_1 = np.fft.irfftn(np.fft.ifftshift(vol_1_fft, axes=(-3, -2)), s=vol.shape)
+    vol_2 = np.fft.irfftn(np.fft.ifftshift(vol_2_fft, axes=(-3, -2)), s=vol.shape)    
     return vol_1, vol_2
     
 
-def _get_f2fd_vol(vol_fft, bernoulli_mask_ratio=0.5, bernoulli_mask_patch_size=8, phase_inversion_ratio=0.1, min_mask_radius=0.05, max_mask_radius=0.1):
+def _get_f2fd_vol_fft(vol_fft, bernoulli_mask_ratio=0.5, bernoulli_mask_patch_size=8, phase_inversion_ratio=0.1, min_mask_radius=0.05, max_mask_radius=0.1):
     # Patch-based Bernoulli Masking (8x8x8 patches)
     size = vol_fft.shape[0]
     mask_shape = (size // bernoulli_mask_patch_size, size // bernoulli_mask_patch_size, 1 + (size // 2 + 1) // bernoulli_mask_patch_size)
@@ -55,10 +58,34 @@ def _get_f2fd_vol(vol_fft, bernoulli_mask_ratio=0.5, bernoulli_mask_patch_size=8
     vol_1_fft = vol_fft_inverted * overall_mask_1
     #vol_2_fft = vol_fft_inverted * overall_mask_2
     
-    vol_1 = np.fft.irfftn(np.fft.ifftshift(vol_1_fft, axes=(-3, -2)), s=vol.shape)
+    #vol_1 = np.fft.irfftn(np.fft.ifftshift(vol_1_fft, axes=(-3, -2)), s=vol.shape)
     #vol_2 = np.fft.irfftn(np.fft.ifftshift(vol_2_fft, axes=(-3, -2)), s=vol.shape)    
         
-    return vol_1 #, vol_2
+    return vol_1_fft #, vol_2_fft
 
 
 
+# #%%
+# import mrcfile
+# from matplotlib import pyplot as plt
+# from scipy.ndimage import gaussian_filter
+# import torch
+
+# with mrcfile.open("/mnt/hdd_pool_bigsur/datasets/shrec2021/full_dataset/model_0/reconstruction.mrc", permissive=True) as f:
+#     vol = torch.from_numpy(f.data[256:256+48, 156:156+48, 156:156+48])
+    
+# vol_0, vol_1 = get_f2fd_pair(vol, bernoulli_mask_ratio=0.5, bernoulli_mask_patch_size=8, phase_inversion_ratio=0.1, min_mask_radius=0.05, max_mask_radius=0.1)
+
+# vol_0 = torch.from_numpy(vol_0)
+# vol_1 = torch.from_numpy(vol_1)
+
+# print((vol_0 - vol_1).norm() / vol_0.norm())
+# print((vol_0 - vol).norm() / vol.norm())  
+
+# plt.imshow(vol[32])
+# plt.show()
+# plt.imshow(gaussian_filter(vol_0[32], 3))
+
+# #plt.imshow(vol_1[32])
+
+# # %%
