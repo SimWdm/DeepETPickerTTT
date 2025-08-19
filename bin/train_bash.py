@@ -57,6 +57,7 @@ if __name__ == '__main__':
 
     args.denoising = cfg.get('denoising', False)
     args.train_denoising_only = cfg.get('train_denoising_only', False)
+    args.init_model_from_ckpt = cfg.get('init_model_from_ckpt', None)
     
 
     train_list = []

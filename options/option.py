@@ -95,6 +95,8 @@ class BaseOptions():
         self.parser.add_argument('--lw_kernel', type=int, default=3)
         self.parser.add_argument('--denoising', type=str2bool, help='whether use denoising', default=False)
         self.parser.add_argument('--train_denoising_only', type=str2bool, help='whether train denoising only', default=False)
+        self.parser.add_argument('--init_model_from_ckpt', type=str, default='',
+                                 help='Initialize model from checkpoint')
 
         # training hyper-parameters
         self.parser.add_argument('--learning_rate', type=float, default=5e-5)

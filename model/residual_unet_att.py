@@ -295,7 +295,7 @@ class Decoder(nn.Module):
             if use_lw:
                 self.basic_module = ExtResNetBlock_lightWeight(in_channels, out_channels, lw_kernel=lw_kernel)
             else:
-                self.basic_module = ExtResNetBlock(in_channels, out_channels, norm='bn', act=act)
+                self.basic_module = ExtResNetBlock(in_channels, out_channels, norm=norm, act=act)
 
     def forward(self, encoder_features, x, ReturnInput=False):
         x = self.upsampling(encoder_features, x)

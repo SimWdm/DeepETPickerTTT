@@ -414,6 +414,7 @@ def train_func(args, stdout=None):
                      check_val_every_n_epoch=args.check_val_every_n_epoch,
                     )
 
+    #runner.validate(model)
     runner.fit(model)
     print('*' * 100)
     print('Training Finished')

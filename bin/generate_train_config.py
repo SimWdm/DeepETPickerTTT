@@ -41,6 +41,7 @@ if __name__ == "__main__":
     if not args.denoising and args.train_denoising_only:
         print("Setting 'denoising' to True because 'train_denoising_only' is set to True.")
         train_config['denoising'] = True
+    train_config['init_model_from_ckpt'] = args.init_model_from_ckpt
     
     print(train_config['gpu_ids'])
 
