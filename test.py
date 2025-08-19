@@ -7,6 +7,7 @@ import mrcfile
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader
 import sys
+import tqdm
 # from dataset.dataloader import Dataset_ClsBased
 import pandas as pd
 import importlib
@@ -71,23 +72,35 @@ def test_func(args, stdout=None):
                                 seg_output, paf_output, logsigma1 = self.forward(img)
                             else:
                                 seg_output = self.model.get_segmentation_output(img)
-
                             if args.test_use_pad:
                                 mp_num = int(sorted([int(i) for i in cfg["ocp_diameter"].split(',')])[-1] / (args.meanPool_kernel - 1) + 1)
                                 if args.num_classes > 1:
-                                    return self._nms_v2(seg_output[:, 1:], kernel=args.meanPool_kernel,
-                                                        mp_num=mp_num, positions=index)
+                                    out = self._nms_v2(seg_output[:, 1:], kernel=args.meanPool_kernel,
+                                                        mp_num=mp_num, positions=index), (index, seg_output)
                                 else:
-                                    return self._nms_v2(seg_output[:, :], kernel=args.meanPool_kernel,
-                                                        mp_num=mp_num, positions=index)
+                                    out = self._nms_v2(seg_output[:, :], kernel=args.meanPool_kernel,
+                                                        mp_num=mp_num, positions=index), (index, seg_output)
+                        return out
 
                     def test_step_end(self, outputs):
                         return outputs
 
                     def test_epoch_end(self, epoch_output):
+                        # save full tomogram
+                        out_dir = '/'.join(args.checkpoints.split('/')[:-2]) + f'/{args.out_name}'
+                        index = torch.cat([i[1][0] for i in epoch_output], dim=0)
+                        seg_output = torch.cat([i[1][1] for i in epoch_output], dim=0)
+                        # version_X directory 
+                        versino_dir = '/'.join(out_dir.split('/')[:-1])
+                        out_dir_tomo = f"{versino_dir}/full_segmentation_output"
+                        os.makedirs(out_dir_tomo, exist_ok=True)
+                        full_tomogram = self._reassemble(seg_output, index)
+                        torch.save(full_tomogram, os.path.join(out_dir_tomo, f'{dir_name}.pt'))
+                        print(f"Saved full tomogram to {os.path.join(out_dir_tomo, f'{dir_name}.pt')}")
+                        
                         with torch.no_grad():
                             if args.meanPool_NMS:
-                                coords_out = torch.cat(epoch_output, dim=0).detach().cpu().numpy()
+                                coords_out = torch.cat([e[0] for e in epoch_output], dim=0).detach().cpu().numpy()
                                 print('coords_out:', coords_out.shape)
                                 if args.de_duplication:
                                     centroids = de_dup(coords_out, args)
@@ -192,6 +205,50 @@ def test_func(args, stdout=None):
                         except:
                             # print('haha')
                             return torch.zeros([0, 5]).cuda()
+                    
+                    def _reassemble(self, seg_output, index):
+                        block_size = args.block_size
+                        pad_size = args.pad_size[0]
+                        """
+                        Modification! Reassemble the sub-tomograms to full tomogram
+                        """
+                        seg_output = seg_output.cpu()
+                        seg_output_crop = torch.stack([seg_output[..., pad_size:-pad_size, pad_size:-pad_size, pad_size:-pad_size] for seg_output in seg_output.squeeze()])
+                        index = index.cpu()
+
+                        top_left = index - (block_size // 2) - pad_size
+                        full_z, full_y, full_x = torch.max(top_left + block_size, dim=0).values
+                        
+                        if len(seg_output_crop.shape) == 5:
+                            num_classes = seg_output_crop.shape[1]
+                            # Initialize full tomogram and count matrix
+                            full_tomogram = torch.zeros((num_classes, full_z, full_y, full_x), device=seg_output.device)
+                            count_matrix = torch.zeros((num_classes, full_z, full_y, full_x), device=seg_output.device)
+                        else:
+                            full_tomogram = torch.zeros((full_z, full_y, full_x), device=seg_output.device)
+                            count_matrix = torch.zeros((full_z, full_y, full_x), device=seg_output.device)
+
+
+                        # Load your sub-tomograms
+                        for i, (z, y, x) in tqdm.tqdm(enumerate(top_left), total=len(top_left), desc="Building full tomogram"):
+                            
+                            z_start = z + pad_size
+                            y_start = y + pad_size
+                            x_start = x + pad_size
+                            
+                            z_end = z_start + block_size - 2*pad_size
+                            y_end = y_start + block_size - 2*pad_size
+                            x_end = x_start + block_size - 2*pad_size
+                            
+                            # insert sub-tomogram data
+                            seg_output_crop = seg_output.squeeze()[i, ..., pad_size:-pad_size, pad_size:-pad_size, pad_size:-pad_size]
+                            full_tomogram[..., z_start:z_end, y_start:y_end, x_start:x_end] += seg_output_crop
+                            count_matrix[..., z_start:z_end, y_start:y_end, x_start:x_end] += 1
+
+                        # average overlapping regions
+                        count_matrix[count_matrix == 0] = 1  # Prevent division by zero
+                        full_tomogram /= count_matrix
+                        return full_tomogram
 
                 # load trained checkpoints to model
                 model = UNetTest.load_from_checkpoint(args.checkpoints)
