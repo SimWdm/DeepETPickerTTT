@@ -36,7 +36,12 @@ if __name__ == "__main__":
     train_config['seg_thresh'] = args.threshold
     train_config['gpu_ids'] = ','.join([str(i) for i in args.gpu_id])
     train_config['resume_from_checkpoint'] = args.resume_from_checkpoint
-    train_config['denoising'] = args.denoising  
+    train_config['denoising'] = args.denoising
+    train_config['train_denoising_only'] = args.train_denoising_only
+    if not args.denoising and args.train_denoising_only:
+        print("Setting 'denoising' to True because 'train_denoising_only' is set to True.")
+        train_config['denoising'] = True
+    
     print(train_config['gpu_ids'])
 
 

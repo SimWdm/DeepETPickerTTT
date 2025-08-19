@@ -56,6 +56,8 @@ if __name__ == '__main__':
     args.num_classes = train_cls_num
 
     args.denoising = cfg.get('denoising', False)
+    args.train_denoising_only = cfg.get('train_denoising_only', False)
+    
 
     train_list = []
     for item in args.train_set_ids.split(','):

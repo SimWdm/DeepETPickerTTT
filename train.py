@@ -84,32 +84,43 @@ class UNetExperiment(pl.LightningModule):
         #img, label, index = train_batch
         img, label = train_batch['img'], train_batch['label']
         img = img.to(torch.float32)
-        seg_output = self.model.get_segmentation_output(img)
+                
+        train_loss = 0
+        denom = 0
         
-        if args.use_mask:
-            mask = label.clone().detach()
-            mask[mask > 0] = 1
-            label[label < 255] = 0
-            label[label > 0] = 1
+        if args.train_denoising_only:
+            loss_seg = 0
+        else:
+            seg_output = self.model.get_segmentation_output(img)
+            
+            if args.use_mask:
+                mask = label.clone().detach()
+                mask[mask > 0] = 1
+                label[label < 255] = 0
+                label[label > 0] = 1
 
-            # update label and mask according to label-threshold
-            label[seg_output > args.seg_tau] = 1
-            mask[seg_output > args.seg_tau] = 1
-            mask[seg_output < (1 - args.seg_tau)] = 1
+                # update label and mask according to label-threshold
+                label[seg_output > args.seg_tau] = 1
+                mask[seg_output > args.seg_tau] = 1
+                mask[seg_output < (1 - args.seg_tau)] = 1
 
-            seg_output = seg_output * mask
-        loss_seg = self.loss_function_seg(seg_output, label)
+                seg_output = seg_output * mask
+            loss_seg = self.loss_function_seg(seg_output, label)
+            denom += 1
         train_loss = loss_seg
-        
+
         if args.denoising:
             loss_denoising = self.get_denoising_loss(train_batch)
-            train_loss = (train_loss + loss_denoising) / 2
+            train_loss = train_loss + loss_denoising
+            denom += 1
             #train_loss = loss_denoising
+        
+        train_loss = train_loss / denom
             
         self.log('train_loss', train_loss, on_step=False, on_epoch=True)
         if args.denoising:
-            self.log('train_loss_seg', loss_seg, on_step=False, on_epoch=True)
             self.log('train_loss_denoising', loss_denoising, on_step=False, on_epoch=True)
+            self.log('train_loss_seg', loss_seg, on_step=False, on_epoch=True)
             
         return train_loss
 
