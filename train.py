@@ -78,20 +78,13 @@ class UNetExperiment(pl.LightningModule):
             return loss_denoising, denoising_output
         else:
             return loss_denoising
-    
-    
-    def get_segmentation_output(self, img):
-        seg_output = self.forward(img)
-        if self.args.denoising:
-            seg_output = seg_output[:, :-1, :, :, :]
-        return seg_output
 
     def training_step(self, train_batch, batch_idx):
         args = self.args
         #img, label, index = train_batch
         img, label = train_batch['img'], train_batch['label']
         img = img.to(torch.float32)
-        seg_output = self.get_segmentation_output(img)
+        seg_output = self.model.get_segmentation_output(img)
         
         if args.use_mask:
             mask = label.clone().detach()
@@ -127,7 +120,7 @@ class UNetExperiment(pl.LightningModule):
             img, label, index = val_batch['img'], val_batch['label'], val_batch['position']
             index = torch.cat([i.view(1, -1) for i in index], dim=0).permute(1, 0)
             img = img.to(torch.float32)
-            self.seg_output = self.get_segmentation_output(img)
+            self.seg_output = self.model.get_segmentation_output(img)
 
             if (batch_idx >= self.len_block // args.batch_size and args.test_mode == "test_val") or \
                     args.test_mode == "test" or args.test_mode == "val" or args.test_mode == "val_v1":

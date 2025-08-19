@@ -63,12 +63,14 @@ def test_func(args, stdout=None):
 
                     def test_step(self, test_batch, batch_idx):
                         with torch.no_grad():
-                            img, label, index = test_batch
+                            #img, label, index = test_batch
+                            img, label, index = test_batch["img"], test_batch["label"], test_batch["position"]
                             index = torch.cat([i.view(1, -1) for i in index], dim=0).permute(1, 0)
                             if args.use_paf:
+                                raise NotImplementedError("PAF is not implemented in this test function")
                                 seg_output, paf_output, logsigma1 = self.forward(img)
                             else:
-                                seg_output = self.forward(img)
+                                seg_output = self.model.get_segmentation_output(img)
 
                             if args.test_use_pad:
                                 mp_num = int(sorted([int(i) for i in cfg["ocp_diameter"].split(',')])[-1] / (args.meanPool_kernel - 1) + 1)

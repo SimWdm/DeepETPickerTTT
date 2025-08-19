@@ -210,6 +210,30 @@ class ResidualUNet3D(nn.Module):
                 return [out, paf_out, self.logsigma]
             else:
                 return out
+            
+    def get_denoising_output(self, x):
+        """
+        Returns the denoising output of the model.
+        :param x: Input tensor.
+        :return: Denoising output tensor.
+        """
+        if not self.denoising:
+            raise ValueError("Denoising is not enabled in this model.")
+        else:
+            out = self.forward(x)   
+            return out[:, -1, :, :, :].unsqueeze(1)
+        
+    def get_segmentation_output(self, x):
+        """
+        Returns the segmentation output of the model.
+        :param x: Input tensor.
+        :return: Segmentation output tensor.
+        """
+        out = self.forward(x)
+        if self.denoising:
+            return out[:, :-1, :, :, :]
+        else:
+            return out
 
 
 class Encoder(nn.Module):

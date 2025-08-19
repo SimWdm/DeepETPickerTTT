@@ -4,6 +4,7 @@ import os
 import importlib
 from os.path import dirname, abspath
 import numpy as np
+import pandas as pd
 DeepETPickerHome = dirname(abspath(__file__))
 DeepETPickerHome = os.path.split(DeepETPickerHome)[0]
 sys.path.append(DeepETPickerHome)
@@ -36,6 +37,7 @@ if __name__ == '__main__':
         train_cls_num = train_cls_num + 1
         args.use_sigmoid = False
         args.use_softmax = True
+    args.denoising = cfg['denoising']
     args.batch_size = cfg['batch_size']
     args.block_size = cfg['patch_size']
     args.val_batch_size = args.batch_size
@@ -65,10 +67,14 @@ if __name__ == '__main__':
                fmt='%s',
                newline='\n')
 
-    # tomo_list = [i for i in os.listdir(cfg[f"{cfg['base_path']}/data_std"]) if cfg['tomo_format'] in i]
-    tomo_list = np.loadtxt(f"{cfg['base_path']}/data_std/num_name.csv",
-                           delimiter='\t',
-                           dtype=str)
+    #tomo_list = [i for i in os.listdir(cfg[f"{cfg['base_path']}/data_std"]) if cfg['tomo_format'] in i]
+    # tomo_list = np.loadtxt(f"{cfg['base_path']}/data_std/num_name.csv",
+    #                        delimiter='\t',
+    #                        dtype=str)
+    tomo_list = pd.read_csv(os.path.join(cfg['tomo_path'], 'num_name.csv'),
+                            delimiter='\t',
+                            header=None,
+                            dtype=str)
     args.test_idxs = np.arange(len(tomo_list))
 
     for k, v in sorted(vars(args).items()):
