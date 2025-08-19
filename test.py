@@ -75,10 +75,10 @@ def test_func(args, stdout=None):
                             if args.test_use_pad:
                                 mp_num = int(sorted([int(i) for i in cfg["ocp_diameter"].split(',')])[-1] / (args.meanPool_kernel - 1) + 1)
                                 if args.num_classes > 1:
-                                    out = self._nms_v2(seg_output[:, 1:], kernel=args.meanPool_kernel,
+                                    out = self._nms_v2(seg_output[:, 1:], threshold=args.threshold, kernel=args.meanPool_kernel,
                                                         mp_num=mp_num, positions=index), (index, seg_output)
                                 else:
-                                    out = self._nms_v2(seg_output[:, :], kernel=args.meanPool_kernel,
+                                    out = self._nms_v2(seg_output[:, :], threshold=args.threshold, kernel=args.meanPool_kernel,
                                                         mp_num=mp_num, positions=index), (index, seg_output)
                         return out
 
@@ -172,8 +172,8 @@ def test_func(args, stdout=None):
                             self.dir_name = test_dataset.dir_name
                             return test_dataloader
 
-                    def _nms_v2(self, pred, kernel=3, mp_num=5, positions=None):
-                        pred = torch.where(pred > 0.5, 1, 0)
+                    def _nms_v2(self, pred, threshold=0.5, kernel=3, mp_num=5, positions=None):
+                        pred = torch.where(pred > threshold, 1, 0)
                         meanPool = nn.AvgPool3d(kernel, 1, kernel // 2).cuda()
                         maxPool = nn.MaxPool3d(kernel, 1, kernel // 2).cuda()
                         hmax = pred.clone().float()
