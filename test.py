@@ -63,24 +63,38 @@ def test_func(args, stdout=None):
                         return self.model(x)
 
                     def test_step(self, test_batch, batch_idx):
+                        out = {}
                         with torch.no_grad():
                             #img, label, index = test_batch
                             img, label, index = test_batch["img"], test_batch["label"], test_batch["position"]
                             index = torch.cat([i.view(1, -1) for i in index], dim=0).permute(1, 0)
+                            out["index"] = index
                             if args.use_paf:
                                 raise NotImplementedError("PAF is not implemented in this test function")
                                 seg_output, paf_output, logsigma1 = self.forward(img)
                             else:
                                 seg_output = self.model.get_segmentation_output(img)
+                                out["seg_output"] = seg_output
                             if args.test_use_pad:
                                 mp_num = int(sorted([int(i) for i in cfg["ocp_diameter"].split(',')])[-1] / (args.meanPool_kernel - 1) + 1)
-                                if args.num_classes > 1:
-                                    out = self._nms_v2(seg_output[:, 1:], threshold=args.threshold, kernel=args.meanPool_kernel,
-                                                        mp_num=mp_num, positions=index), (index, seg_output)
-                                else:
-                                    out = self._nms_v2(seg_output[:, :], threshold=args.threshold, kernel=args.meanPool_kernel,
-                                                        mp_num=mp_num, positions=index), (index, seg_output)
-                        return out
+                                # ensure thresholds is always a list
+                                thresholds = args.threshold if isinstance(args.threshold, (list, tuple)) else [args.threshold]
+
+                                out["nms_outputs"] = {}
+                                for thr in thresholds:
+                                    if args.num_classes > 1:
+                                        nms_out = self._nms_v2(
+                                            seg_output[:, 1:], threshold=thr,
+                                            kernel=args.meanPool_kernel, mp_num=mp_num, positions=index
+                                        )
+                                    else:
+                                        nms_out = self._nms_v2(
+                                            seg_output[:, :], threshold=thr,
+                                            kernel=args.meanPool_kernel, mp_num=mp_num, positions=index
+                                        )
+                                    out["nms_outputs"][thr] = nms_out
+                            return out
+
 
                     def test_step_end(self, outputs):
                         return outputs
@@ -88,35 +102,41 @@ def test_func(args, stdout=None):
                     def test_epoch_end(self, epoch_output):
                         # save full tomogram
                         out_dir = '/'.join(args.checkpoints.split('/')[:-2]) + f'/{args.out_name}'
-                        index = torch.cat([i[1][0] for i in epoch_output], dim=0)
-                        seg_output = torch.cat([i[1][1] for i in epoch_output], dim=0)
+                        index = torch.cat([o["index"] for o in epoch_output], dim=0)
+                        seg_output = torch.cat([o["seg_output"] for o in epoch_output], dim=0)
                         # version_X directory 
-                        versino_dir = '/'.join(out_dir.split('/')[:-1])
-                        out_dir_tomo = f"{versino_dir}/full_segmentation_output"
+                        version_dir = '/'.join(out_dir.split('/')[:-1])
+                        out_dir_tomo = f"{version_dir}/full_segmentation_output"
                         os.makedirs(out_dir_tomo, exist_ok=True)
                         full_tomogram = self._reassemble(seg_output, index)
                         torch.save(full_tomogram, os.path.join(out_dir_tomo, f'{dir_name}.pt'))
                         print(f"Saved full tomogram to {os.path.join(out_dir_tomo, f'{dir_name}.pt')}")
                         
-                        with torch.no_grad():
-                            if args.meanPool_NMS:
-                                coords_out = torch.cat([e[0] for e in epoch_output], dim=0).detach().cpu().numpy()
-                                print('coords_out:', coords_out.shape)
-                                if args.de_duplication:
-                                    centroids = de_dup(coords_out, args)
-                                out_dir = '/'.join(args.checkpoints.split('/')[:-2]) + f'/{args.out_name}'
-                                os.makedirs(os.path.join(out_dir, 'Coords_withArea'), exist_ok=True)
-                                np.savetxt(os.path.join(out_dir, 'Coords_withArea', dir_name + '.coords'),
-                                           centroids.astype(float),
-                                           fmt='%s',
-                                           delimiter='\t')
+                        
+                        nms_outputs = {
+                            thresh: torch.cat([o["nms_outputs"][thresh] for o in epoch_output], dim=0).cpu().numpy()
+                            for thresh in epoch_output[0]["nms_outputs"].keys()
+                        }
+                        
+                        for thresh, coords_out in nms_outputs.items():
+                            with torch.no_grad():
+                                if args.meanPool_NMS:
+                                    print('coords_out:', coords_out.shape)
+                                    if args.de_duplication:
+                                        centroids = de_dup(coords_out, args)
+                                    out_dir = '/'.join(args.checkpoints.split('/')[:-2]) + f'/{args.out_name}'
+                                    os.makedirs(os.path.join(out_dir, 'Coords_withArea'), exist_ok=True)
+                                    np.savetxt(os.path.join(out_dir, 'Coords_withArea', dir_name + f'_thresh={thresh}' + '.coords'),
+                                            centroids.astype(float),
+                                            fmt='%s',
+                                            delimiter='\t')
 
-                                coords = centroids[:, 0:4]
-                                os.makedirs(os.path.join(out_dir, 'Coords_All'), exist_ok=True)
-                                np.savetxt(os.path.join(out_dir, 'Coords_All', dir_name + '.coords'),
-                                           coords.astype(int),
-                                           fmt='%s',
-                                           delimiter='\t')
+                                    coords = centroids[:, 0:4]
+                                    os.makedirs(os.path.join(out_dir, 'Coords_All'), exist_ok=True)
+                                    np.savetxt(os.path.join(out_dir, 'Coords_All', dir_name + f'_thresh={thresh}' + '.coords'),
+                                            coords.astype(int),
+                                            fmt='%s',
+                                            delimiter='\t')
 
 
                     def test_dataloader(self):

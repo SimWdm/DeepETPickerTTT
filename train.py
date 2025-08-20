@@ -120,8 +120,7 @@ class UNetExperiment(pl.LightningModule):
         self.log('train_loss', train_loss, on_step=False, on_epoch=True)
         if args.denoising:
             self.log('train_loss_denoising', loss_denoising, on_step=False, on_epoch=True)
-            self.log('train_loss_seg', loss_seg, on_step=False, on_epoch=True)
-            
+            self.log('train_loss_seg', loss_seg, on_step=False, on_epoch=True, prog_bar=False)
         return train_loss
 
     def validation_step(self, val_batch, batch_idx):
@@ -151,7 +150,8 @@ class UNetExperiment(pl.LightningModule):
                 self.log('val_recall', recall, on_step=False, on_epoch=True)
                 self.log('val_f1', f1_score, on_step=False, on_epoch=True)
                 self.log('val_iou', iou, on_step=False, on_epoch=True)
-
+                self.log("epoch_idx", self.current_epoch, on_epoch=True, prog_bar=True)
+                
                 # return loss_seg
                 tensorboard = self.logger.experiment
 
@@ -248,6 +248,7 @@ class UNetExperiment(pl.LightningModule):
                             cal_metrics_MultiCls(coords_out, self.gt_coords, self.occupancy_map, self.cfg, args,
                                                  args.pad_size, self.dir_name, self.partical_volume)
                         self.log('cls_f1', cls_f1, on_step=False, on_epoch=True)
+                        
 
     def train_dataloader(self):
         args = self.args
@@ -398,13 +399,20 @@ def train_func(args, stdout=None):
     tb_logger = loggers.TensorBoardLogger(f"{model.train_cfg['base_path']}/runs/{model.train_cfg['dset_name']}",
                                           name=logger_name)
     lr_monitor = LearningRateMonitor(logging_interval='step')
+    
+    latest_checkpoint = ModelCheckpoint(
+        save_top_k=1,
+        monitor="epoch_idx",
+        mode='max',
+        filename='latest',
+    )
 
     runner = Trainer(min_epochs=min(50, args.max_epoch),
                      max_epochs=args.max_epoch,
                      logger=tb_logger,
                      gpus=-1,
                      checkpoint_callback=checkpoint_callback,
-                     callbacks=[lr_monitor],
+                     callbacks=[lr_monitor, latest_checkpoint],
                      accelerator='ddp',
                      precision=32,
                      #profiler=True,
@@ -412,6 +420,7 @@ def train_func(args, stdout=None):
                      resume_from_checkpoint=args.resume_from_checkpoint,
                      num_sanity_val_steps=2,
                      check_val_every_n_epoch=args.check_val_every_n_epoch,
+
                     )
 
     #runner.validate(model)

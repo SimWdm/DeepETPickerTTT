@@ -33,7 +33,7 @@ if __name__ == "__main__":
     train_config['scheduler'] = args.scheduler
     train_config['max_epochs'] = args.max_epoch
     train_config['check_val_every_n_epoch'] = args.check_val_every_n_epoch
-    train_config['seg_thresh'] = args.threshold
+    train_config['seg_thresh'] = args.threshold[0] if len(args.threshold) == 1 else args.threshold
     train_config['gpu_ids'] = ','.join([str(i) for i in args.gpu_id])
     train_config['resume_from_checkpoint'] = args.resume_from_checkpoint
     train_config['denoising'] = args.denoising
