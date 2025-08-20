@@ -52,8 +52,8 @@ class ResidualUNet3D(nn.Module):
         self.denoising = denoising
         
         self.segmentation_channels = out_channels
-        if self.denoising:
-            self.segmentation_channels -= 1
+        # if self.denoising:
+        #     self.segmentation_channels -= 1
             
         if self.segmentation_channels > 1:
             self.use_softmax = args.use_softmax
@@ -144,6 +144,20 @@ class ResidualUNet3D(nn.Module):
                 self.logsigma = nn.Parameter(torch.FloatTensor([0.5] * 2))
             else:
                 self.logsigma = torch.FloatTensor([0.5] * 2)
+        
+        if self.denoising:
+            self.denoising_path = nn.Sequential(
+                nn.Conv3d(f_maps[0], f_maps[0], kernel_size=3, padding=1),
+                nn.InstanceNorm3d(f_maps[0] // 2),
+                nn.ReLU(inplace=True),
+                nn.Conv3d(f_maps[0], f_maps[0] // 2, kernel_size=3, padding=1),
+                nn.InstanceNorm3d(f_maps[0] // 2),
+                nn.ReLU(inplace=True),
+                nn.Conv3d(f_maps[0] // 2, f_maps[0] // 4, kernel_size=3, padding=1),
+                nn.InstanceNorm3d(f_maps[0] // 4),
+                nn.ReLU(inplace=True),
+                nn.Conv3d(f_maps[0] // 4, 1, 1)
+            )
 
     def forward(self, x):
         if self.use_IP:
@@ -165,7 +179,6 @@ class ResidualUNet3D(nn.Module):
             x = self.aspp(x)
         # remove last
         encoders_features = encoders_features[1:]
-
         if self.se_loss:
             se_out = self.avgpool(x)
             se_out = se_out.view(se_out.size(0), -1)
@@ -178,8 +191,7 @@ class ResidualUNet3D(nn.Module):
         out = self.final_conv(x)
 
         if self.denoising:
-            denoising_out = out[:, -1, :, :, :].unsqueeze(1)
-            out = out[:, :-1, :, :, :]
+            denoising_out = self.denoising_path(x)
 
         # check if more than 1 classification channel
         if self.segmentation_channels > 1:
