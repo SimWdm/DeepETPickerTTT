@@ -467,7 +467,7 @@ class Dataset_ClsBased(data.Dataset):
                 label = np.zeros((1, self.shift * 2, self.shift * 2, self.shift * 2))
             else:
                 label = label.reshape(-1, self.shift * 2, self.shift * 2, self.shift * 2)
-
+        
         if self.use_paf:
             try:
                 paf_label = np.array(paf_label).astype(np.float).reshape(-1, self.shift * 2, self.shift * 2, self.shift * 2)
@@ -504,6 +504,8 @@ class Dataset_ClsBased(data.Dataset):
 
         img = torch.as_tensor(img).float()
         label = torch.as_tensor(label).float()
+                
+        
         out = {
             "img": img,
             "label": label,

@@ -54,6 +54,7 @@ if __name__ == '__main__':
     args.train_set_ids = cfg['train_set_ids']
     args.val_set_ids = cfg['val_set_ids']
     args.num_classes = train_cls_num
+    args.optim = cfg.get('optim', 'AdamW')
 
     args.denoising = cfg.get('denoising', False)
     args.train_denoising_only = cfg.get('train_denoising_only', False)
