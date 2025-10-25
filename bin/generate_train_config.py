@@ -39,6 +39,7 @@ if __name__ == "__main__":
     train_config['denoising'] = args.denoising
     train_config['train_denoising_only'] = args.train_denoising_only
     train_config["optim"] = args.optim
+    train_config["trust_labels"] = args.trust_labels    
     if not args.denoising and args.train_denoising_only:
         print("Setting 'denoising' to True because 'train_denoising_only' is set to True.")
         train_config['denoising'] = True

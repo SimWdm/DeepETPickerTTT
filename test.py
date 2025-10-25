@@ -22,6 +22,7 @@ from dataset.dataloader_DynamicLoad import Dataset_ClsBased
 
 
 def test_func(args, stdout=None):
+    args.get_full_seg = True
     if stdout is not None:
         save_stdout = sys.stdout
         save_stderr = sys.stderr
@@ -74,7 +75,8 @@ def test_func(args, stdout=None):
                                 seg_output, paf_output, logsigma1 = self.forward(img)
                             else:
                                 seg_output = self.model.get_segmentation_output(img)
-                                out["seg_output"] = seg_output
+                                if args.get_full_seg:
+                                    out["seg_output"] = seg_output.cpu()
                             if args.test_use_pad:
                                 mp_num = int(sorted([int(i) for i in cfg["ocp_diameter"].split(',')])[-1] / (args.meanPool_kernel - 1) + 1)
                                 # ensure thresholds is always a list
@@ -92,7 +94,7 @@ def test_func(args, stdout=None):
                                             seg_output[:, :], threshold=thr,
                                             kernel=args.meanPool_kernel, mp_num=mp_num, positions=index
                                         )
-                                    out["nms_outputs"][thr] = nms_out
+                                    out["nms_outputs"][thr] = nms_out.detach().cpu()
                             return out
 
 
@@ -101,16 +103,17 @@ def test_func(args, stdout=None):
 
                     def test_epoch_end(self, epoch_output):
                         # save full tomogram
-                        out_dir = '/'.join(args.checkpoints.split('/')[:-2]) + f'/{args.out_name}'
-                        index = torch.cat([o["index"] for o in epoch_output], dim=0)
-                        seg_output = torch.cat([o["seg_output"] for o in epoch_output], dim=0)
-                        # version_X directory 
-                        version_dir = '/'.join(out_dir.split('/')[:-1])
-                        out_dir_tomo = f"{version_dir}/full_segmentation_output"
-                        os.makedirs(out_dir_tomo, exist_ok=True)
-                        full_tomogram = self._reassemble(seg_output, index)
-                        torch.save(full_tomogram, os.path.join(out_dir_tomo, f'{dir_name}.pt'))
-                        print(f"Saved full tomogram to {os.path.join(out_dir_tomo, f'{dir_name}.pt')}")
+                        if args.get_full_seg:
+                            out_dir = '/'.join(args.checkpoints.split('/')[:-2]) + f'/{args.out_name}'
+                            index = torch.cat([o["index"] for o in epoch_output], dim=0)
+                            seg_output = torch.cat([o["seg_output"] for o in epoch_output], dim=0)
+                            # version_X directory 
+                            version_dir = '/'.join(out_dir.split('/')[:-1])
+                            out_dir_tomo = f"{version_dir}/full_segmentation_output"
+                            os.makedirs(out_dir_tomo, exist_ok=True)
+                            full_tomogram = self._reassemble(seg_output, index)
+                            torch.save(full_tomogram, os.path.join(out_dir_tomo, f'{dir_name}.pt'))
+                            print(f"Saved full tomogram to {os.path.join(out_dir_tomo, f'{dir_name}.pt')}")
                         
                         
                         nms_outputs = {
@@ -276,17 +279,27 @@ def test_func(args, stdout=None):
                 # model = UNetTest().model
                 model.eval()
                 runner = Trainer(gpus=args.gpu_id, #
-                                 accelerator='dp'
+                                 #accelerator='dp'
                                  )
                 os.makedirs(f'result/{dataset}/{model_name}/', exist_ok=True)
 
                 runner.test(model=model)
+                
+                del runner, model
+                import gc
+                gc.collect()
+                torch.cuda.synchronize()
+                torch.cuda.empty_cache()
+                torch.cuda.ipc_collect()
 
         end_time = time.time()
         used_time = end_time - start_time
         save_path = '/'.join(args.checkpoints.split('/')[:-2]) + f'/{args.out_name}'
         os.makedirs(save_path, exist_ok=True)
         pad_size = args.pad_size[0]
+        
+        with torch.no_grad():
+            torch.cuda.empty_cache()
 
     print('*' * 100)
     print('Testing Finished!')

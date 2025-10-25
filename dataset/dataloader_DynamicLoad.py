@@ -107,6 +107,7 @@ class Dataset_ClsBased(data.Dataset):
 
         dir_names = num_name.iloc[:, 1].to_numpy().tolist()
         print(num_name)
+        self.num_name = num_name
         # print(dir_names)
 
         if self.mode == 'train':
@@ -504,12 +505,18 @@ class Dataset_ClsBased(data.Dataset):
 
         img = torch.as_tensor(img).float()
         label = torch.as_tensor(label).float()
-                
-        
+    
+        if self.mode == "val" or self.args.trust_labels is None:
+            trust_label = True
+        else:
+            trust_label = self.args.trust_labels[idx]   
+        assert trust_label is not None
+
         out = {
             "img": img,
             "label": label,
-            "position": position
+            "position": position,
+            "trust_label": trust_label,
         }
 
         if self.use_bg_part and self.Sel_Referance:

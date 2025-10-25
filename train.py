@@ -11,9 +11,10 @@ from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 from pytorch_lightning import loggers
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
-from utils.loss import DiceLoss
+from utils.loss import DiceLoss, CELoss, BCELoss
 from utils.metrics import seg_metrics
 from utils.cc_loss import CCLoss3D
+from utils.backup import backup_python_files  
 from utils.colors import COLORS
 from model.model_loader import get_model
 from utils.misc import combine, cal_metrics_NMS_OneCls, get_centroids, cal_metrics_MultiCls, combine_torch
@@ -57,6 +58,12 @@ class UNetExperiment(pl.LightningModule):
 
         if args.loss_func_seg == 'Dice':
             self.loss_function_seg = DiceLoss(args=args)
+        elif args.loss_func_seg == 'CE':
+            if args.num_classes > 1:
+                self.loss_function_seg = CELoss(args=args)
+            else:
+                self.loss_function_seg = BCELoss(args=args)
+                #raise NotImplementedError("For binary classification, please use Dice loss.")
         if args.denoising:
             self.loss_function_denoising = CCLoss3D(reduction="mean")
 
@@ -66,6 +73,14 @@ class UNetExperiment(pl.LightningModule):
             self.thresholds = np.linspace(0.2, 0.80, 13)
         self.partical_volume = 4 / 3 * np.pi * (self.val_cfg["label_diameter"] / 2) ** 3
         self.args = args
+    
+    def on_train_epoch_start(self):
+        if self.global_step == 0:
+            print("Making code backup...")
+            backup_code_dir = f"{self.logger.log_dir}/code_backup"
+            backup_python_files(src="/workspaces/fine_tune_tt", dest=backup_code_dir, exclude_dirs=["code_backup"])
+            print("... done!")
+
 
     def forward(self, x):
         return self.model(x)
@@ -105,7 +120,7 @@ class UNetExperiment(pl.LightningModule):
                 mask[seg_output < (1 - args.seg_tau)] = 1
 
                 seg_output = seg_output * mask
-            loss_seg = self.loss_function_seg(seg_output, label)
+            loss_seg = self.loss_function_seg(seg_output, label, trust_labels=train_batch["trust_label"])
             denom += 1
         train_loss = loss_seg
 
@@ -134,7 +149,7 @@ class UNetExperiment(pl.LightningModule):
 
             if (batch_idx >= self.len_block // args.batch_size and args.test_mode == "test_val") or \
                     args.test_mode == "test" or args.test_mode == "val" or args.test_mode == "val_v1":
-                loss_seg = self.loss_function_seg(self.seg_output, label)
+                loss_seg = self.loss_function_seg(self.seg_output, label, trust_labels=val_batch["trust_label"])
                 val_loss = loss_seg
                 if args.denoising:
                     loss_denoising, output_denoising = self.get_denoising_loss(val_batch, return_denoising_output=True)

@@ -10,7 +10,14 @@ def str2bool(v):
         return False
     else:
         raise argparse.ArgumentTypeError('Boolean value expected.')
-
+    
+def int_or_none(v):
+    if v.lower() == "none" or v is None:
+        return None
+    else:
+        if type(v) == int:
+            return v
+        
 
 class BaseOptions():
     def __init__(self):
@@ -207,7 +214,7 @@ class BaseOptions():
         self.parser.add_argument('--eta', type=float, default=0.3, help="Dice_SE_Loss: weight of SE loss")
         self.parser.add_argument('--FL_a0', type=float, default=0.1, help="Soft_FL Loss: weight of a0")
         self.parser.add_argument('--FL_a1', type=float, default=0.9, help="Soft_FL Loss: weight of a1")
-
+        self.parser.add_argument('--trust_labels', type=str2bool, nargs='+', default=None, help='List of booleans, one per class, e.g. --trust_labels true false true')
         # eval parameters
         self.parser.add_argument('--JudgeInDilation', type=str2bool, default=False)
         self.parser.add_argument('--save_FPsTPs', type=str2bool, default=False,

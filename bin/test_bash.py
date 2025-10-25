@@ -5,6 +5,8 @@ import importlib
 from os.path import dirname, abspath
 import numpy as np
 import pandas as pd
+import torch
+
 DeepETPickerHome = dirname(abspath(__file__))
 DeepETPickerHome = os.path.split(DeepETPickerHome)[0]
 sys.path.append(DeepETPickerHome)
@@ -80,5 +82,12 @@ if __name__ == '__main__':
     for k, v in sorted(vars(args).items()):
         print(k, '=', v)
 
-    # Testing
-    test.test_func(args, stdout=None)
+    # modification: this is not elegant but needed to avoid CUDA out of memory
+    for id in  np.arange(len(tomo_list)):
+        torch.cuda.empty_cache()
+        args.test_idxs = [id]
+        # Testing
+        test = None
+        test = importlib.import_module(".test", package=os.path.split(DeepETPickerHome)[1])
+        print(f"Processing tomogram {tomo_list.iloc[id, 1]} ({id+1}/{len(tomo_list)})")
+        test.test_func(args, stdout=None)
