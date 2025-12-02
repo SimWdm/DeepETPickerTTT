@@ -153,7 +153,12 @@ class Dataset_ClsBased(data.Dataset):
         if self.mode == 'train' or self.mode == 'test_val' or self.mode == 'val':
             self.position = [
                 pd.read_csv(os.path.join(coord_path, dir_names[i] + coord_format),
-                            sep='\t', header=None).to_numpy() for i in self.data_range]
+                            sep='\t', header=None).to_numpy() for i in self.data_range
+            ]
+            # 777 indicates cube centroids, if these are present, extract points only there
+            for i in range(len(self.position)):
+                if 777 in self.position[i][:, 0]:
+                    self.position[i] = self.position[i][self.position[i][:, 0] == 777]
 
         # load Tomo
         if self.mode == 'test' or self.mode == 'test_val' or self.mode == 'val_v1' \
@@ -248,6 +253,7 @@ class Dataset_ClsBased(data.Dataset):
             self.label = [
                 mrcfile.open(os.path.join(label_path, dir_names[idx] + tomo_format)) for idx
                 in self.data_range]
+
 
         # load paf
         if self.use_paf:

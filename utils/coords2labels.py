@@ -47,11 +47,15 @@ class Coord_to_Label():
         data_file = mrcfile.open(self.tomo_file, permissive=True)
         # print(os.path.join(self.label_path, self.names[i]))
         label_file = mrcfile.new(os.path.join(self.label_path, self.names[i]),
-                                 overwrite=True)
+                                overwrite=True)
 
         label_positions = pd.read_csv(os.path.join(self.base_path, 'coords', '%s.coords' % self.dir_list[i]), sep='\t',
-                                      header=None).to_numpy()
-
+                                    header=None)
+        # if 777 class exists, remove them because these are cube centroids and we do not want to generate labels for them
+        if len(label_positions.columns) == 4:
+            label_positions = label_positions[label_positions.loc[:,0] != 777]
+        label_positions = label_positions.to_numpy()
+        
         # template = np.fromfunction(lambda i, j, k: (i - r) * (i - r) + (j - r) * (j - r) + (k - r) * (k - r) <= r * r,
         #                            (2 * r + 1, 2 * r + 1, 2 * r + 1), dtype=int).astype(int)
 
@@ -112,7 +116,7 @@ class Coord_to_Label():
             tmp1[tmp1 <= tg] = 0
             tmp1 = np.where(tmp1 > 0, cls_idx, 0)
             label_data[z_start:z_end, y_start:y_end, x_start:x_end] = tmp1
-
+        
         label_file.set_data(label_data)
 
         data_file.close()
@@ -121,11 +125,13 @@ class Coord_to_Label():
         # return 'work %s done' % i
 
     def gen_labels(self):
-        if len(self.dir_list) == 1:
-            self.single_handle(0)
-        else:
-            with Pool(len(self.dir_list)) as p:
-                p.map(self.single_handle, np.arange(len(self.dir_list)).tolist())
+        # if len(self.dir_list) == 1:
+        #     self.single_handle(0)
+        # else:
+        #     with Pool(len(self.dir_list)) as p:
+        #         p.map(self.single_handle, np.arange(len(self.dir_list)).tolist())
+        for i in range(len(self.dir_list)):
+            self.single_handle(i)
 
 
 def label_gen_show(args):
@@ -185,6 +191,7 @@ class Coord_to_Label_v1():
             data_file = mrcfile.open(self.tomo_file, permissive=True)
 
             label_positions = pd.read_csv(self.coord_file, sep='\t', header=None).to_numpy()
+            
             if self.label_type == 'Coords':
                 return label_positions
 
@@ -239,6 +246,7 @@ class Coord_to_Label_v1():
         elif '.mrc' in self.tomo_file or '.rec' in self.tomo_file:
             label_data = mrcfile.open(self.coord_file, permissive=True)
             return label_data.data
+
 
 if __name__ == "__main__":
     import sys
