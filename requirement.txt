@@ -3,7 +3,7 @@ pandas
 mrcfile
 scikit-image
 pillow==8.3.2
-pycm
+pycm==4.0
 scikit-plot
 pyqtgraph==0.12.1
 PyQt5==5.15.4
