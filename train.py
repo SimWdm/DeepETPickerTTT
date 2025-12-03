@@ -78,7 +78,9 @@ class UNetExperiment(pl.LightningModule):
         if self.global_step == 0:
             print("Making code backup...")
             backup_code_dir = f"{self.logger.log_dir}/code_backup"
-            backup_python_files(src="/workspaces/fine_tune_tt", dest=backup_code_dir, exclude_dirs=["code_backup"])
+            # src is parent of this file
+            src = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            backup_python_files(src=src, dest=backup_code_dir, exclude_dirs=["code_backup"])
             print("... done!")
 
 
