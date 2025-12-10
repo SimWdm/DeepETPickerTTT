@@ -5,7 +5,7 @@ from skimage.measure import regionprops
 from skimage.morphology import dilation
 from scipy.spatial import distance
 from pycm import ConfusionMatrix
-from pycm.pycm_output import table_print, stat_print
+#from pycm.pycm_output import table_print, stat_print
 from pycm.pycm_param import SUMMARY_CLASS, SUMMARY_OVERALL
 import scikitplot as skplt
 import pandas as pd
@@ -718,5 +718,7 @@ def de_dup(pred, args):
     pred = np.delete(pred, indexs, axis=0)
     print('After De_Dup:', pred.shape[0])
     return pred
+
+
 
 
