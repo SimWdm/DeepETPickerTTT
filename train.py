@@ -76,12 +76,13 @@ class UNetExperiment(pl.LightningModule):
     
     def on_train_epoch_start(self):
         if self.global_step == 0:
-            print("Making code backup...")
-            backup_code_dir = f"{self.logger.log_dir}/code_backup"
-            # src is parent of this file
-            src = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            backup_python_files(src=src, dest=backup_code_dir, exclude_dirs=["code_backup"])
-            print("... done!")
+            if self.trainer.global_rank == 0:
+                print("Making code backup...")
+                backup_code_dir = f"{self.logger.log_dir}/code_backup"
+                # src is parent of this file
+                src = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                backup_python_files(src=src, dest=backup_code_dir, exclude_dirs=["code_backup"])
+                print("... done!")
 
 
     def forward(self, x):
@@ -280,7 +281,7 @@ class UNetExperiment(pl.LightningModule):
                                          args=args)
         return DataLoader(train_dataset,
                           batch_size=args.batch_size,
-                          num_workers=8 if args.batch_size >= 32 else 4,
+                          num_workers=8, #if args.batch_size >= 32 else 4,
                           shuffle=True,
                           pin_memory=False)
 
@@ -307,7 +308,7 @@ class UNetExperiment(pl.LightningModule):
 
         val_dataloader1 = DataLoader(val_dataset,
                                      batch_size=args.val_batch_size,
-                                     num_workers=8 if args.batch_size >= 32 else 4,
+                                     num_workers=1,
                                      shuffle=False,
                                      pin_memory=False)
         return val_dataloader1
@@ -433,7 +434,7 @@ def train_func(args, stdout=None):
                      accelerator='ddp',
                      precision=32,
                      #profiler=True,
-                     sync_batchnorm=True,
+                     sync_batchnorm=False,
                      resume_from_checkpoint=args.resume_from_checkpoint,
                      num_sanity_val_steps=2,
                      check_val_every_n_epoch=args.check_val_every_n_epoch,
