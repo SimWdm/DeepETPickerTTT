@@ -1,3 +1,7 @@
+import torch
+torch.backends.cudnn.benchmark = False
+torch.backends.cudnn.deterministic = True
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -221,17 +225,29 @@ class UNetExperiment(pl.LightningModule):
                         tensorboard.add_image('img_denoising', img_denoising, self.current_epoch, dataformats="CHW")
                     
             if args.num_classes > 1:
+                out = self._nms_v2(self.seg_output[:, 1:], kernel=args.meanPool_kernel, mp_num=6, positions=index)
+                self._val_epoch_output.append(out)
                 return self._nms_v2(self.seg_output[:, 1:], kernel=args.meanPool_kernel, mp_num=6, positions=index)
-            else:
-                return self._nms_v2(self.seg_output[:, :], kernel=args.meanPool_kernel, mp_num=6, positions=index)
+            else:                
+                out = self._nms_v2(self.seg_output[:, :], kernel=args.meanPool_kernel, mp_num=6, positions=index)
+                self._val_epoch_output.append(out)
+                return out
 
     def validation_step_end(self, outputs):
         args = self.args
         if 'test' in args.test_mode:
             return outputs
 
-    def validation_epoch_end(self, epoch_output):
+    def on_validation_epoch_start(self):
+        # will hold per-batch outputs that you previously returned
+        self._val_epoch_output = []
+
+    def on_validation_epoch_end(self):
         args = self.args
+        epoch_output = getattr(self, "_val_epoch_output", [])
+        if len(epoch_output) == 0:
+            return
+        
         with torch.no_grad():
             if 'test' in args.test_mode:
                 if args.meanPool_NMS:
@@ -266,7 +282,8 @@ class UNetExperiment(pl.LightningModule):
                             cal_metrics_MultiCls(coords_out, self.gt_coords, self.occupancy_map, self.cfg, args,
                                                  args.pad_size, self.dir_name, self.partical_volume)
                         self.log('cls_f1', cls_f1, on_step=False, on_epoch=True)
-                        
+        self._val_epoch_output.clear()
+
 
     def train_dataloader(self):
         args = self.args
@@ -425,24 +442,54 @@ def train_func(args, stdout=None):
         filename='latest',
     )
 
-    runner = Trainer(min_epochs=min(50, args.max_epoch),
-                     max_epochs=args.max_epoch,
-                     logger=tb_logger,
-                     gpus=-1,
-                     checkpoint_callback=checkpoint_callback,
-                     callbacks=[lr_monitor, latest_checkpoint],
-                     accelerator='ddp',
-                     precision=32,
-                     #profiler=True,
-                     sync_batchnorm=False,
-                     resume_from_checkpoint=args.resume_from_checkpoint,
-                     num_sanity_val_steps=2,
-                     check_val_every_n_epoch=args.check_val_every_n_epoch,
+    # PL1.1 (DeepETPicker default)
+    # runner = Trainer(min_epochs=min(50, args.max_epoch),
+    #                  max_epochs=args.max_epoch,
+    #                  logger=tb_logger,
+    #                  gpus=-1,
+    #                  checkpoint_callback=checkpoint_callback,
+    #                  callbacks=[lr_monitor, latest_checkpoint],
+    #                  accelerator='ddp',
+    #                  precision=32,
+    #                  #profiler=True,
+    #                  sync_batchnorm=False,
+    #                  resume_from_checkpoint=args.resume_from_checkpoint,
+    #                  num_sanity_val_steps=2,
+    #                  check_val_every_n_epoch=args.check_val_every_n_epoch,
+    #                 )
 
-                    )
+    # #runner.validate(model)
+    # runner.fit(model)
+    
+    # PL2.x
+    # - gpus -> devices
+    # - accelerator='ddp' -> strategy='ddp' + accelerator='gpu'
+    # - checkpoint_callback=... -> include it in callbacks
+    # - resume_from_checkpoint -> pass ckpt_path to fit()
+    # - precision can stay (32 / "16-mixed" / "bf16-mixed")
 
-    #runner.validate(model)
-    runner.fit(model)
+    runner = Trainer(
+        min_epochs=min(50, args.max_epoch),
+        max_epochs=args.max_epoch,
+        logger=tb_logger,
+
+        accelerator="gpu",
+        devices="auto",          # uses all visible GPUs; or set devices=2 etc.
+        strategy="ddp" if torch.cuda.device_count() > 1 else "auto",
+
+        precision=32,
+        sync_batchnorm=False,
+
+        callbacks=[lr_monitor, latest_checkpoint, checkpoint_callback],
+
+        num_sanity_val_steps=2,
+        check_val_every_n_epoch=args.check_val_every_n_epoch,
+    )
+
+    # resume_from_checkpoint is gone; use ckpt_path in fit()
+    runner.fit(model, ckpt_path=args.resume_from_checkpoint or None)
+    
+    
     print('*' * 100)
     print('Training Finished')
     print(f'Training pid:{os.getpid()}')
