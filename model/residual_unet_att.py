@@ -335,7 +335,7 @@ class ExtResNetBlock(nn.Module):
         out = self.conv2(out)
         out = self.conv3(out)
 
-        out += residual
+        out = out + residual
         out = self.non_linearity(out)
         return out
 
@@ -359,7 +359,7 @@ class ExtResNetBlock_att(nn.Module):
         out = self.conv2(out)
         out = self.conv3(out)
 
-        out += residual
+        out = out + residual
         out = self.non_linearity(out)
         return out
 
@@ -398,7 +398,7 @@ class ExtResNetBlock_lightWeight(nn.Module):
         out = self.conv2(out)
         out = self.conv3(out)
 
-        out += residual
+        out = out + residual
         out = self.non_linearity(out)
         return out
 
