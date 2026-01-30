@@ -95,18 +95,22 @@ def test_func(args, stdout=None):
                                             kernel=args.meanPool_kernel, mp_num=mp_num, positions=index
                                         )
                                     out["nms_outputs"][thr] = nms_out.detach().cpu()
+                            self._test_epoch_out.append(out)
                             return out
 
 
                     def test_step_end(self, outputs):
                         return outputs
 
-                    def test_epoch_end(self, epoch_output):
+                    def on_test_epoch_start(self):
+                        self._test_epoch_out = []
+
+                    def on_test_epoch_end(self):
                         # save full tomogram
                         if args.get_full_seg:
                             out_dir = '/'.join(args.checkpoints.split('/')[:-2]) + f'/{args.out_name}'
-                            index = torch.cat([o["index"] for o in epoch_output], dim=0)
-                            seg_output = torch.cat([o["seg_output"] for o in epoch_output], dim=0)
+                            index = torch.cat([o["index"] for o in self._test_epoch_out], dim=0)
+                            seg_output = torch.cat([o["seg_output"] for o in self._test_epoch_out], dim=0)
                             # version_X directory 
                             version_dir = '/'.join(out_dir.split('/')[:-1])
                             out_dir_tomo = f"{version_dir}/full_segmentation_output"
@@ -117,8 +121,8 @@ def test_func(args, stdout=None):
                         
                         
                         nms_outputs = {
-                            thresh: torch.cat([o["nms_outputs"][thresh] for o in epoch_output], dim=0).cpu().numpy()
-                            for thresh in epoch_output[0]["nms_outputs"].keys()
+                            thresh: torch.cat([o["nms_outputs"][thresh] for o in self._test_epoch_out], dim=0).cpu().numpy()
+                            for thresh in self._test_epoch_out[0]["nms_outputs"].keys()
                         }
                         
                         for thresh, coords_out in nms_outputs.items():
@@ -278,9 +282,11 @@ def test_func(args, stdout=None):
 
                 # model = UNetTest().model
                 model.eval()
-                runner = Trainer(gpus=args.gpu_id, #
-                                 #accelerator='dp'
-                                 )
+                runner = Trainer(
+                    accelerator='gpu',
+                    devices=args.gpu_id,
+                    #accelerator='dp'
+                )
                 os.makedirs(f'result/{dataset}/{model_name}/', exist_ok=True)
 
                 runner.test(model=model)
