@@ -300,7 +300,9 @@ class UNetExperiment(pl.LightningModule):
                           batch_size=args.batch_size,
                           num_workers=8, #if args.batch_size >= 32 else 4,
                           shuffle=True,
-                          pin_memory=False)
+                          pin_memory=False, 
+                          persistent_workers=True
+                        )
 
     def val_dataloader(self):
         args = self.args
