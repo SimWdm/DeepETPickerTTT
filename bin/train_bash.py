@@ -28,7 +28,8 @@ if __name__ == '__main__':
     args.use_coord = True
     args.test_use_pad = True
     args.meanPool_NMS = True
-    args.f_maps = [24, 48, 72, 108]
+    if args.f_maps is None:
+        args.f_maps = [24, 48, 72, 108]
     args.num_classes = cfg['num_cls']
     train_cls_num = cfg['num_cls']
     if args.num_classes == 1:

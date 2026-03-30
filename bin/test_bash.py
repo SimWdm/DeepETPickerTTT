@@ -14,6 +14,29 @@ sys.path.append(os.path.split(DeepETPickerHome)[0])
 test = importlib.import_module(".test", package=os.path.split(DeepETPickerHome)[1])
 option = importlib.import_module(f".options.option", package=os.path.split(DeepETPickerHome)[1])
 
+
+def _infer_f_maps_from_checkpoint(checkpoint_path):
+    ckpt = torch.load(checkpoint_path, map_location="cpu")
+    state_dict = ckpt.get("state_dict", ckpt)
+
+    f_maps = []
+    i = 0
+    while True:
+        conv_key = f"model.encoders.{i}.basic_module.conv1.conv.weight"
+        lw_key = f"model.encoders.{i}.basic_module.conv1.pwconv2.weight"
+        if conv_key in state_dict:
+            f_maps.append(int(state_dict[conv_key].shape[0]))
+            i += 1
+            continue
+        if lw_key in state_dict:
+            f_maps.append(int(state_dict[lw_key].shape[0]))
+            i += 1
+            continue
+        break
+
+    return f_maps if len(f_maps) > 0 else None
+
+
 if __name__ == '__main__':
     options = option.BaseOptions()
     args = options.gather_options()
@@ -29,7 +52,12 @@ if __name__ == '__main__':
     args.test_use_pad = True
     args.use_seg = True
     args.meanPool_NMS = True
-    args.f_maps = [24, 48, 72, 108]
+    if args.f_maps is None:
+        inferred_f_maps = _infer_f_maps_from_checkpoint(args.checkpoints)
+        if inferred_f_maps is not None:
+            args.f_maps = inferred_f_maps
+        else:
+            args.f_maps = [24, 48, 72, 108]
     args.num_classes = cfg['num_cls']
     train_cls_num = cfg['num_cls']
     if args.num_classes == 1:
