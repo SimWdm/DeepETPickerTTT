@@ -3,12 +3,11 @@ import torch.utils.data as data
 import numpy as np
 import mrcfile
 import pandas as pd
+from pandas.errors import EmptyDataError
 import torch
 import warnings
 from batchgenerators.transforms.spatial_transforms import SpatialTransform_2, MirrorTransform
 from torch.utils.data import DataLoader
-
-from .f2fd import get_f2fd_pair
 
 
 class Dataset_ClsBased(data.Dataset):
@@ -41,6 +40,8 @@ class Dataset_ClsBased(data.Dataset):
         self.use_ice_part = args.use_ice_part
         self.Sel_Referance = args.Sel_Referance
         self.denoising = args.denoising
+        if self.denoising:
+            raise NotImplementedError("Denoising mode not implemented yet.")
 
         pad_size = pad_size[0] if isinstance(pad_size, list) else pad_size
         base_dir = cfg['base_path']
@@ -151,14 +152,29 @@ class Dataset_ClsBased(data.Dataset):
         warnings.simplefilter('ignore')
 
         if self.mode == 'train' or self.mode == 'test_val' or self.mode == 'val':
-            self.position = [
-                pd.read_csv(os.path.join(coord_path, dir_names[i] + coord_format),
-                            sep='\t', header=None).to_numpy() for i in self.data_range
-            ]
+            self.position = []
+            for i in self.data_range:
+                coord_file = os.path.join(coord_path, dir_names[i] + coord_format)
+                if not os.path.exists(coord_file) or os.path.getsize(coord_file) == 0:
+                    print(f"Warning: coord file missing or empty: {coord_file} -> using empty array.")
+                    arr = np.empty((0, 4))
+                else:
+                    try:
+                        arr = pd.read_csv(coord_file, sep='\t', header=None).to_numpy()
+                    except EmptyDataError:
+                        print(f"Warning: coord file {coord_file} raised EmptyDataError; using empty array.")
+                        arr = np.empty((0, 4))
+                self.position.append(arr)
+
             # 777 indicates cube centroids, if these are present, extract points only there
             for i in range(len(self.position)):
-                if 777 in self.position[i][:, 0]:
+                if self.position[i].size != 0 and 777 in self.position[i][:, 0]:
                     self.position[i] = self.position[i][self.position[i][:, 0] == 777]
+
+            # build list of indices that have non-empty position lists
+            self.nonempty_position_indices = [i for i, arr in enumerate(self.position) if arr.size != 0]
+            if len(self.nonempty_position_indices) == 0:
+                print("Warning: No non-empty coord files found for this dataset split.")
 
         # load Tomo
         if self.mode == 'test' or self.mode == 'test_val' or self.mode == 'val_v1' \
@@ -360,7 +376,11 @@ class Dataset_ClsBased(data.Dataset):
         if self.mode == 'train' and random_num > 0:
             print('random samples num:', random_num)
             for j in range(random_num):
-                i = np.random.randint(len(self.data_range))
+                # pick a tomo that has at least one annotation; fall back to uniform if none
+                if hasattr(self, 'nonempty_position_indices') and len(self.nonempty_position_indices) > 0:
+                    i = int(np.random.choice(self.nonempty_position_indices))
+                else:
+                    i = np.random.randint(len(self.data_range))
                 data_shape = self.origin[i].data.shape
                 z = np.random.randint(self.shift + 1, data_shape[0] - self.shift)
                 y = np.random.randint(self.shift + 1, data_shape[1] - self.shift)
@@ -421,7 +441,7 @@ class Dataset_ClsBased(data.Dataset):
                         self.data.append([img, lab, [z, y, x]])
         if self.mode == 'test_val' and args.use_cluster:
             self.data = self.data[-len(self.position[0]):]
-
+    
     def __getitem__(self, index):
         if self.mode == 'test' or self.mode == 'test_val' or self.mode == 'val_v1' or self.mode =='test_only':
             if self.use_paf:
