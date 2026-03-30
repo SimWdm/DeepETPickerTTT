@@ -1,6 +1,7 @@
 import mrcfile
 from multiprocessing import Pool
 import pandas as pd
+from pandas.errors import EmptyDataError
 import os
 import numpy as np
 from glob import glob
@@ -49,8 +50,12 @@ class Coord_to_Label():
         label_file = mrcfile.new(os.path.join(self.label_path, self.names[i]),
                                 overwrite=True)
 
-        label_positions = pd.read_csv(os.path.join(self.base_path, 'coords', '%s.coords' % self.dir_list[i]), sep='\t',
-                                    header=None)
+        try:
+            label_positions = pd.read_csv(os.path.join(self.base_path, 'coords', '%s.coords' % self.dir_list[i]), sep='\t',
+                                        header=None)
+        except (EmptyDataError, FileNotFoundError):
+            # empty or missing coords -> create empty positions so we still write an empty label file
+            label_positions = pd.DataFrame()
         # if 777 class exists, remove them because these are cube centroids and we do not want to generate labels for them
         if len(label_positions.columns) == 4:
             label_positions = label_positions[label_positions.loc[:,0] != 777]
@@ -190,7 +195,11 @@ class Coord_to_Label_v1():
         if '.coords' in self.coord_file or '.txt' in self.coord_file:
             data_file = mrcfile.open(self.tomo_file, permissive=True)
 
-            label_positions = pd.read_csv(self.coord_file, sep='\t', header=None).to_numpy()
+            try:
+                label_positions = pd.read_csv(self.coord_file, sep='\t', header=None)
+            except (EmptyDataError, FileNotFoundError):
+                label_positions = pd.DataFrame()
+            label_positions = label_positions.to_numpy()
             
             if self.label_type == 'Coords':
                 return label_positions

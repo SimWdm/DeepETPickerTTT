@@ -1,6 +1,7 @@
 import warnings
 import os
 import glob
+import re
 import numpy as np
 import pandas as pd
 import sys
@@ -8,11 +9,16 @@ import sys
 warnings.simplefilter('ignore')
 base_dir = "/ldap_shared/synology_shared/IBP_ribosome/liver_NewConstruct/Pick/reconstruction_2400"
 
+
+def _natural_sort_key(path: str):
+    parts = re.split(r"(\d+)", path)
+    return [int(part) if part.isdigit() else part for part in parts]
+
 def coords_gen(coord_path, coord_format, base_dir):
     os.makedirs(os.path.join(base_dir, 'coords'), exist_ok=True)
 
     coords_list = [i.split('/')[-1] for i in glob.glob(coord_path + f'/*{coord_format}')]
-    coords_list = sorted(coords_list)
+    coords_list = sorted(coords_list, key=_natural_sort_key)
 
     num_all = []
     dir_names = []
