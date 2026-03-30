@@ -161,13 +161,12 @@ def test_func(args, stdout=None):
                             test_dataloader = DataLoader(test_dataset,
                                                          shuffle=False,
                                                          batch_size=args.batch_size,
-                                                         num_workers=8 if args.batch_size >= 32 else 4,
+                                                         num_workers=0,#8 if args.batch_size >= 32 else 4,
                                                          pin_memory=False)
 
                             self.len_block = test_dataset.test_len
                             self.data_shape = test_dataset.data_shape
                             self.occupancy_map = test_dataset.occupancy_map
-                            self.gt_coords = test_dataset.gt_coords
                             self.dir_name = test_dataset.dir_name
                             return test_dataloader
                         elif args.test_mode == 'test_only':
@@ -189,6 +188,7 @@ def test_func(args, stdout=None):
                                 num_work = 8
                             else:
                                 num_work = 16
+                            num_work = 0
                             test_dataloader = DataLoader(test_dataset,
                                                          shuffle=False,
                                                          batch_size=args.batch_size,
