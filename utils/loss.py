@@ -20,13 +20,27 @@ def flatten(tensor):
 
 # Dice loss
 class DiceLoss(nn.Module):
-    def __init__(self, smooth=1, args=None):
+    def __init__(self, smooth=1, args=None, beta=1):
         super(DiceLoss, self).__init__()
         self.smooth = smooth
         self.use_softmax = args.use_softmax
         self.use_sigmoid = args.use_sigmoid
+        self.beta = beta
 
 
+    # def forward(self, outputs, targets, trust_labels=True, beta=1):
+    #     if not trust_labels.all().item():
+    #         raise NotImplementedError("Un-trusted labels not implemented in this version.")
+    #     if not targets.shape[-1] == targets.shape[-2] == targets.shape[-3]:
+    #         raise ValueError("Target tensor must be cubic, in spatial dimensions.")
+    #     # flatten label and prediction tensors
+    #     outputs = flatten(outputs)
+    #     targets = flatten(targets)
+
+    #     intersection = (outputs * targets).sum(-1)
+    #     dice = (2. * intersection + self.smooth) / (outputs.sum(-1) + targets.sum(-1) + self.smooth)
+    #     return 1 - dice.mean()
+        
     def forward(self, outputs, targets, trust_labels=True):
         if not trust_labels.all().item():
             raise NotImplementedError("Un-trusted labels not implemented in this version.")
@@ -36,8 +50,10 @@ class DiceLoss(nn.Module):
         outputs = flatten(outputs)
         targets = flatten(targets)
 
-        intersection = (outputs * targets).sum(-1)
-        dice = (2. * intersection + self.smooth) / (outputs.sum(-1) + targets.sum(-1) + self.smooth)
+        tp = (outputs * targets).sum(-1)
+        fn = ((1 - outputs) * targets).sum(-1)
+        fp = (outputs * (1 - targets)).sum(-1)
+        dice = ((1+self.beta**2) * tp + self.smooth) / ((tp + fn) * self.beta**2 + (tp + fp) + self.smooth)
         return 1 - dice.mean()
         
     
