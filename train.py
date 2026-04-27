@@ -1,6 +1,17 @@
 import torch
 torch.backends.cudnn.benchmark = False
 torch.backends.cudnn.deterministic = True
+try:
+    # prefer deterministic algorithms but allow warn-only for ops without deterministic kernels
+    torch.use_deterministic_algorithms(True, warn_only=True)
+except Exception:
+    # older torch versions may not have this API
+    pass
+from torch.multiprocessing import set_sharing_strategy
+try:
+    set_sharing_strategy('file_system')
+except Exception:
+    pass
 
 import numpy as np
 import torch
@@ -30,7 +41,6 @@ if not sys.warnoptions:
     import warnings
 
     warnings.simplefilter("ignore")
-
 
 class UNetExperiment(pl.LightningModule):
     def __init__(self, args):
@@ -62,14 +72,23 @@ class UNetExperiment(pl.LightningModule):
 
         if args.loss_func_seg == 'Dice':
             self.loss_function_seg = DiceLoss(args=args)
+        elif args.loss_func_seg == 'Dice4':
+            self.loss_function_seg = DiceLoss(args=args, beta=4)
         elif args.loss_func_seg == 'CE':
             if args.num_classes > 1:
                 self.loss_function_seg = CELoss(args=args)
             else:
                 self.loss_function_seg = BCELoss(args=args)
                 #raise NotImplementedError("For binary classification, please use Dice loss.")
+        elif args.loss_func_seg == 'BCE':
+            self.loss_function_seg = BCELoss(args=args)
+        else:
+            raise ValueError(f"Unsupported loss_func_seg: {args.loss_func_seg}")
         if args.denoising:
             self.loss_function_denoising = CCLoss3D(reduction="mean")
+            
+        # log f4 loss
+        self.f4_loss = DiceLoss(args=args, beta=4)
 
         if 'gaussian' in self.val_cfg["label_type"]:
             self.thresholds = np.linspace(0.15, 0.45, 7)
@@ -163,16 +182,18 @@ class UNetExperiment(pl.LightningModule):
                     val_loss = (val_loss + loss_denoising) / 2
                     
                 precision, recall, f1_score, iou = seg_metrics(self.seg_output, label, threshold=args.threshold)
+                f4_loss = self.f4_loss(self.seg_output, label, trust_labels=val_batch["trust_label"])
 
-                self.log('val_loss', val_loss, on_step=False, on_epoch=True)
+                self.log('val_loss', val_loss, on_step=False, on_epoch=True, sync_dist=True)
                 if args.denoising:
-                    self.log('val_loss_seg', loss_seg, on_step=False, on_epoch=True)
-                    self.log('val_loss_denoising', loss_denoising, on_step=False, on_epoch=True)
-                self.log('val_precision', precision, on_step=False, on_epoch=True)
-                self.log('val_recall', recall, on_step=False, on_epoch=True)
-                self.log('val_f1', f1_score, on_step=False, on_epoch=True)
-                self.log('val_iou', iou, on_step=False, on_epoch=True)
-                self.log("epoch_idx", self.current_epoch, on_epoch=True, prog_bar=True)
+                    self.log('val_loss_seg', loss_seg, on_step=False, on_epoch=True, sync_dist=True)
+                    self.log('val_loss_denoising', loss_denoising, on_step=False, on_epoch=True, sync_dist=True)
+                self.log('val_precision', precision, on_step=False, on_epoch=True, sync_dist=True)
+                self.log('val_recall', recall, on_step=False, on_epoch=True, sync_dist=True)
+                self.log('val_f1', f1_score, on_step=False, on_epoch=True, sync_dist=True)
+                self.log('val_iou', iou, on_step=False, on_epoch=True, sync_dist=True)
+                self.log('val_f4_loss', f4_loss, on_step=False, on_epoch=True, sync_dist=True)
+                self.log("epoch_idx", self.current_epoch, on_epoch=True, prog_bar=True, sync_dist=True)
                 
                 # return loss_seg
                 tensorboard = self.logger.experiment
@@ -297,12 +318,13 @@ class UNetExperiment(pl.LightningModule):
                                          cfg=self.train_cfg,
                                          args=args)
         return DataLoader(train_dataset,
-                          batch_size=args.batch_size,
-                          num_workers=8, #if args.batch_size >= 32 else 4,
-                          shuffle=True,
-                          pin_memory=False, 
-                          persistent_workers=True
-                        )
+                batch_size=args.batch_size,
+               num_workers=8,
+                shuffle=True,
+                pin_memory=True,
+                persistent_workers=True,
+                prefetch_factor=2,
+        )
 
     def val_dataloader(self):
         args = self.args
@@ -414,15 +436,26 @@ def train_func(args, stdout=None):
         sys.stdout = stdout
         sys.stderr = stdout
 
+    if getattr(args, "train_seed", None) is not None:
+        pl.seed_everything(args.train_seed, workers=True)
+
     args.pad_size = args.pad_size[0]
     if 'test' in args.test_mode:
-        checkpoint_callback = ModelCheckpoint(save_top_k=1,
+        val_loss_callback = ModelCheckpoint(save_top_k=1,
                                               monitor=f'cls_pr_alpha{args.prf1_alpha:.1f}' if args.num_classes == 1 else 'cls_f1',
                                               mode='max')
     else:
-        checkpoint_callback = ModelCheckpoint(save_top_k=1,
+        val_loss_callback = ModelCheckpoint(save_top_k=5,
                                               monitor='val_loss',
-                                              mode='min')
+                                              mode='min',
+                                              filename='{epoch:04d}_{val_loss:.6f}_{val_f1:.6f}'
+                                              )
+    
+    val_f4_loss_callback = ModelCheckpoint(save_top_k=5,
+                                              monitor='val_f4_loss',
+                                              mode='min',
+                                              filename='{epoch:04d}_{val_f4_loss:.6f}'
+                                              )
 
     model = UNetExperiment(args)
     logger_name = "{}_{}_BlockSize{}_{}Loss_MaxEpoch{}_bs{}_lr{}_IP{}_bg{}_coord{}_Softmax{}_{}_{}_TN{}".format(
@@ -441,7 +474,15 @@ def train_func(args, stdout=None):
         save_top_k=1,
         monitor="epoch_idx",
         mode='max',
-        filename='latest',
+        filename='latest-{epoch:04d}',
+    )
+    
+    early_stopping = EarlyStopping(
+        monitor=args.early_stop_on if args.early_stop_on is not None else 'val_f4_loss',
+        mode="min",
+        patience=max(1, (args.max_epoch // 5) // args.check_val_every_n_epoch),
+        min_delta=0.0,
+        verbose=True,
     )
 
     # PL1.1 (DeepETPicker default)
@@ -478,14 +519,15 @@ def train_func(args, stdout=None):
         accelerator="gpu",
         devices="auto",          # uses all visible GPUs; or set devices=2 etc.
         strategy="ddp" if torch.cuda.device_count() > 1 else "auto",
-
+        
         precision=32,
         sync_batchnorm=False,
 
-        callbacks=[lr_monitor, latest_checkpoint, checkpoint_callback],
+        callbacks=[lr_monitor, latest_checkpoint, val_loss_callback, val_f4_loss_callback, early_stopping],
 
-        num_sanity_val_steps=2,
+        num_sanity_val_steps=0,
         check_val_every_n_epoch=args.check_val_every_n_epoch,
+        accumulate_grad_batches=2 if torch.cuda.device_count() == 1 else 1,
     )
 
     # resume_from_checkpoint is gone; use ckpt_path in fit()

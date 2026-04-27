@@ -111,6 +111,8 @@ class BaseOptions():
         self.parser.add_argument('--val_batch_size', help='batch size', type=int, default=0)
         self.parser.add_argument('--max_epoch', help='number of epochs', type=int, default=100)
         self.parser.add_argument('--check_val_every_n_epoch', type=int, default=1, help='check validation every n epochs')
+        self.parser.add_argument('--train_seed', type=int, default=None, help='random seed for training')
+        self.parser.add_argument('--early_stop_on', type=str, default=None, help='metric name to monitor for early stopping')
 
         
         self.parser.add_argument('--loss_func_seg', help='seg loss function type', type=str, default='Dice')
