@@ -167,6 +167,8 @@ class BaseOptions():
         # test_parameters
         self.parser.add_argument('--test_idxs', nargs='+', type=int, default=[0])
         self.parser.add_argument('--save_pred', type=str2bool, help='whether use segmentation', default=False)
+        self.parser.add_argument('--get_full_seg', type=str2bool, default=True,
+                                 help='Whether to assemble and save full segmentation outputs')
         self.parser.add_argument('--max_pxs', type=int, help='dilation pixel numbers', default=18)
         self.parser.add_argument('--de_duplication', type=str2bool, default=False, help='Whether use dilation')
         self.parser.add_argument('--test_mode', type=str, default='test_val', help='test mode')

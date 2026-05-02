@@ -22,7 +22,7 @@ from dataset.dataloader_DynamicLoad import Dataset_ClsBased
 
 
 def test_func(args, stdout=None):
-    args.get_full_seg = True
+    args.get_full_seg = getattr(args, "get_full_seg", True)
     if stdout is not None:
         save_stdout = sys.stdout
         save_stderr = sys.stderr
@@ -161,7 +161,7 @@ def test_func(args, stdout=None):
                             test_dataloader = DataLoader(test_dataset,
                                                          shuffle=False,
                                                          batch_size=args.batch_size,
-                                                         num_workers=0,#8 if args.batch_size >= 32 else 4,
+                                                         num_workers=16,#8 if args.batch_size >= 32 else 4,
                                                          pin_memory=False)
 
                             self.len_block = test_dataset.test_len
