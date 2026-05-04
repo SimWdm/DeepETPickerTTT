@@ -10,6 +10,17 @@ from batchgenerators.transforms.spatial_transforms import SpatialTransform_2, Mi
 from torch.utils.data import DataLoader
 
 
+def _coord_row_metadata(point):
+    has_class_id = len(point) >= 4
+    class_id = point[0] if has_class_id else None
+    return {
+        "has_class_id": has_class_id,
+        "class_id": class_id,
+        "is_cube_center": has_class_id and class_id == 777,
+        "is_class_15": has_class_id and class_id == 15,
+    }
+
+
 class Dataset_ClsBased(data.Dataset):
     def __init__(self,
                  mode='train',
@@ -33,6 +44,7 @@ class Dataset_ClsBased(data.Dataset):
             self.radius = 0
         else:
             self.radius = block_size // 5
+        self.cube_center_radius = 0 if args.use_CL else block_size // 10
         self.use_bg = use_bg
         self.use_paf = use_paf
         self.use_CL_DA = args.use_CL_DA
@@ -168,7 +180,12 @@ class Dataset_ClsBased(data.Dataset):
 
             # 777 indicates cube centroids, if these are present, extract points only there
             for i in range(len(self.position)):
-                if self.position[i].size != 0 and 777 in self.position[i][:, 0]:
+                if (
+                    self.position[i].size != 0
+                    and self.position[i].ndim == 2
+                    and self.position[i].shape[1] >= 4
+                    and 777 in self.position[i][:, 0]
+                ):
                     self.position[i] = self.position[i][self.position[i][:, 0] == 777]
 
             # build list of indices that have non-empty position lists
@@ -302,17 +319,18 @@ class Dataset_ClsBased(data.Dataset):
         if self.mode == 'train' or self.mode == 'val':
             for i in range(len(self.data_range)):
                 for j, point1 in enumerate(self.position[i]):
+                    point_meta = _coord_row_metadata(point1)
                     # if sel_train_num > 0 and j >= sel_train_num:
                     #     continue
                     if args.Sel_Referance:
                         if j in args.sel_train_num:
-                            self.coords.append([i, point1[-3], point1[-2], point1[-1]])
+                            self.coords.append([i, point1[-3], point1[-2], point1[-1], point_meta["is_cube_center"]])
                     else:
-                        if point1[0] == 15:
+                        if point_meta["is_class_15"]:
                             for _ in range(13):
-                                self.coords.append([i, point1[-3], point1[-2], point1[-1]])
+                                self.coords.append([i, point1[-3], point1[-2], point1[-1], point_meta["is_cube_center"]])
                         else:
-                            self.coords.append([i, point1[-3], point1[-2], point1[-1]])
+                            self.coords.append([i, point1[-3], point1[-2], point1[-1], point_meta["is_cube_center"]])
         else:
             if test_use_pad:
                 step_size = block_size - 2 * pad_size
@@ -385,7 +403,7 @@ class Dataset_ClsBased(data.Dataset):
                 z = np.random.randint(self.shift + 1, data_shape[0] - self.shift)
                 y = np.random.randint(self.shift + 1, data_shape[1] - self.shift)
                 x = np.random.randint(self.shift + 1, data_shape[2] - self.shift)
-                self.coords.append([i, x, y, z])
+                self.coords.append([i, x, y, z, False])
 
         if self.mode == 'train':
             print("Training dataset contains {} samples".format((len(self.coords))))
@@ -406,6 +424,8 @@ class Dataset_ClsBased(data.Dataset):
                 self.occupancy_map = np.zeros_like(self.origin[0])
             self.gt_coords = pd.read_csv(os.path.join(coord_path, "%s.coords" % dir_names[self.data_range[0]]),
                      sep='\t', header=None).to_numpy()
+            if self.gt_coords.size != 0 and self.gt_coords.shape[1] >= 4:
+                self.gt_coords = self.gt_coords[self.gt_coords[:, 0] != 777]
 
         if args.use_bg_part and self.Sel_Referance:
             self.coords_bg = pd.read_csv(os.path.join(coord_path, dir_names[self.data_range[0]] + '_bg' + coord_format),
@@ -419,8 +439,10 @@ class Dataset_ClsBased(data.Dataset):
                 for j, point1 in enumerate(self.position[i]):
                     x, y, z = point1[-3] + pad_size, point1[-2] + pad_size, point1[-1] + pad_size
                     z_max, y_max, x_max = self.origin[i].data.shape
+                    sample_radius = self.cube_center_radius if _coord_row_metadata(point1)["is_cube_center"] else self.radius
                     x, y, z = self.__sample(np.array([x, y, z]),
-                                          np.array([x_max, y_max, z_max]))
+                                          np.array([x_max, y_max, z_max]),
+                                          radius=sample_radius)
                     img = self.origin[i][z - self.shift: z + self.shift,
                           y - self.shift: y + self.shift,
                           x - self.shift: x + self.shift]
@@ -450,11 +472,18 @@ class Dataset_ClsBased(data.Dataset):
                 img, label, position = self.data[index]
 
         else:
-            idx, x, y, z = self.coords[index]
+            coord = self.coords[index]
+            if len(coord) == 5:
+                idx, x, y, z, is_cube_center = coord
+            else:
+                idx, x, y, z = coord
+                is_cube_center = False
             z_max, y_max, x_max = self.origin[idx].data.shape
 
+            sample_radius = self.cube_center_radius if is_cube_center else self.radius
             point = self.__sample(np.array([x, y, z]),
-                                  np.array([x_max, y_max, z_max]))
+                                  np.array([x_max, y_max, z_max]),
+                                  radius=sample_radius)
 
             if self.args.input_cat:
                 img = self.origin[:, point[2] - self.shift:point[2] + self.shift,
@@ -644,9 +673,10 @@ class Dataset_ClsBased(data.Dataset):
         return out
 
 
-    def __sample(self, point, bound):
+    def __sample(self, point, bound, radius=None):
         # point: z, y, x
-        new_point = point + np.random.randint(-self.radius, self.radius + 1, size=3)
+        radius = self.radius if radius is None else radius
+        new_point = point + np.random.randint(-radius, radius + 1, size=3)
         new_point[new_point < self.shift] = self.shift
         new_point[new_point + self.shift > bound] = bound[new_point + self.shift > bound] - self.shift
         return new_point
