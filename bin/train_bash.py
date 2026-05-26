@@ -59,6 +59,8 @@ if __name__ == '__main__':
     args.denoising = cfg.get('denoising', False)
     args.train_denoising_only = cfg.get('train_denoising_only', False)
     args.init_model_from_ckpt = cfg.get('init_model_from_ckpt', None)
+    args.resume_from_checkpoint = cfg.get('resume_from_checkpoint', None)
+    args.load_optimizer_from_checkpoint = cfg.get('load_optimizer_from_checkpoint', None)
     
     args.trust_labels = cfg.get('trust_labels', None)
     

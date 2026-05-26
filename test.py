@@ -40,7 +40,7 @@ def test_func(args, stdout=None):
         args.data_split[-1] = test_idx + 1
 
         num_name = pd.read_csv(os.path.join(cfg["tomo_path"], 'num_name.csv'), sep='\t', header=None)
-        dir_list = num_name.iloc[:, 1]
+        dir_list = num_name.iloc[:, 1].astype(str)
         dir_name = dir_list[args.data_split[-2]]
         print(dir_name)
 
@@ -313,4 +313,3 @@ def test_func(args, stdout=None):
     if stdout is not None:
         sys.stdout = save_stdout
         sys.stderr = save_stderr
-

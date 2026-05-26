@@ -55,6 +55,7 @@ class BaseOptions():
                                  #          'NestUnet', 'VoxResNet', 'HighRes3DNet', 'HRNetv1']
                                  )
         self.parser.add_argument('--resume_from_checkpoint', default=None)
+        self.parser.add_argument('--load_optimizer_from_checkpoint', default=None)
         self.parser.add_argument('--in_channels', help='input channels of the network', type=int, default=1)
         self.parser.add_argument('--f_maps', nargs='+', type=int, help="Feature numbers of ResUnet")
         self.parser.add_argument('--use_LAM', type=str2bool, help='whether use LAM', default=False)
@@ -113,6 +114,12 @@ class BaseOptions():
         self.parser.add_argument('--check_val_every_n_epoch', type=int, default=1, help='check validation every n epochs')
         self.parser.add_argument('--train_seed', type=int, default=None, help='random seed for training')
         self.parser.add_argument('--early_stop_on', type=str, default=None, help='metric name to monitor for early stopping')
+        self.parser.add_argument(
+            '--run_pretrain_validation',
+            type=str2bool,
+            default=True,
+            help='Run a full validation epoch before starting training.',
+        )
 
         
         self.parser.add_argument('--loss_func_seg', help='seg loss function type', type=str, default='Dice')

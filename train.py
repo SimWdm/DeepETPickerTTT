@@ -36,6 +36,7 @@ from utils.misc import combine, cal_metrics_NMS_OneCls, get_centroids, cal_metri
 from sklearn.metrics import precision_recall_fscore_support
 import time
 import json
+import torch.distributed as dist
 
 if not sys.warnoptions:
     import warnings
@@ -96,6 +97,7 @@ class UNetExperiment(pl.LightningModule):
             self.thresholds = np.linspace(0.2, 0.80, 13)
         self.partical_volume = 4 / 3 * np.pi * (self.val_cfg["label_diameter"] / 2) ** 3
         self.args = args
+        self._optimizer_state_loaded = False
     
     def on_train_epoch_start(self):
         if self.global_step == 0:
@@ -106,6 +108,33 @@ class UNetExperiment(pl.LightningModule):
                 src = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
                 backup_python_files(src=src, dest=backup_code_dir, exclude_dirs=["code_backup"])
                 print("... done!")
+
+    def on_fit_start(self):
+        ckpt_path = getattr(self.args, "load_optimizer_from_checkpoint", None)
+        if not ckpt_path or self._optimizer_state_loaded:
+            return
+
+        checkpoint = torch.load(ckpt_path, map_location="cpu")
+        optimizer_states = checkpoint.get("optimizer_states")
+        if not optimizer_states:
+            raise ValueError(f"Checkpoint does not contain optimizer_states: {ckpt_path}")
+        if len(optimizer_states) != len(self.trainer.optimizers):
+            raise ValueError(
+                f"Checkpoint optimizer count ({len(optimizer_states)}) does not match "
+                f"trainer optimizer count ({len(self.trainer.optimizers)})."
+            )
+
+        for optimizer, optimizer_state in zip(self.trainer.optimizers, optimizer_states):
+            optimizer.load_state_dict(optimizer_state)
+
+        if self.trainer.global_rank == 0:
+            print(f"Loaded optimizer state from checkpoint: {ckpt_path}")
+            if self.args.scheduler not in (None, "None"):
+                print(
+                    "Scheduler state was not restored. This run is using a fresh scheduler "
+                    "with restored optimizer state."
+                )
+        self._optimizer_state_loaded = True
 
 
     def forward(self, x):
@@ -319,7 +348,7 @@ class UNetExperiment(pl.LightningModule):
                                          args=args)
         return DataLoader(train_dataset,
                 batch_size=args.batch_size,
-               num_workers=16,
+                num_workers=4,
                 shuffle=True,
                 pin_memory=True,
                 persistent_workers=True,
@@ -530,9 +559,18 @@ def train_func(args, stdout=None):
         accumulate_grad_batches=2 if torch.cuda.device_count() == 1 else 1,
     )
 
+    if getattr(args, "run_pretrain_validation", True):
+        print("*" * 100)
+        print("Running full validation before training...")
+        pretrain_val_metrics = runner.validate(model, verbose=True)
+        print(f"Pre-training validation metrics: {pretrain_val_metrics}")
+        print("*" * 100)
+
     # resume_from_checkpoint is gone; use ckpt_path in fit()
     runner.fit(model, ckpt_path=args.resume_from_checkpoint or None)
     
+    if dist.is_available() and dist.is_initialized():
+        dist.destroy_process_group()
     
     print('*' * 100)
     print('Training Finished')

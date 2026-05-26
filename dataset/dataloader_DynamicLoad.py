@@ -118,7 +118,8 @@ class Dataset_ClsBased(data.Dataset):
         else:
             num_name = pd.read_csv(os.path.join(coord_path, 'num_name.csv'), sep='\t', header=None)
 
-        dir_names = num_name.iloc[:, 1].to_numpy().tolist()
+        # Keep tomogram IDs as strings even when the CSV column looks numeric.
+        dir_names = num_name.iloc[:, 1].astype(str).to_numpy().tolist()
         print(num_name)
         self.num_name = num_name
         # print(dir_names)

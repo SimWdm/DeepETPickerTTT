@@ -36,6 +36,7 @@ if __name__ == "__main__":
     train_config['seg_thresh'] = args.threshold[0] if len(args.threshold) == 1 else args.threshold
     train_config['gpu_ids'] = ','.join([str(i) for i in args.gpu_id])
     train_config['resume_from_checkpoint'] = args.resume_from_checkpoint
+    train_config['load_optimizer_from_checkpoint'] = args.load_optimizer_from_checkpoint
     train_config['denoising'] = args.denoising
     train_config['train_denoising_only'] = args.train_denoising_only
     train_config["optim"] = args.optim
@@ -51,7 +52,6 @@ if __name__ == "__main__":
     with open(f"{args.cfg_save_path}/{args.dset_name}.py", 'w') as f:
         f.write("train_configs=")
         json.dump(train_config, f, separators=(',\n' + ' ' * len('train_configs={'), ': '))
-
 
 
 
