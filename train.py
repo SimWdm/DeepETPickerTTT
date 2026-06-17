@@ -348,7 +348,7 @@ class UNetExperiment(pl.LightningModule):
                                          args=args)
         return DataLoader(train_dataset,
                 batch_size=args.batch_size,
-                num_workers=4,
+                num_workers=16,
                 shuffle=True,
                 pin_memory=True,
                 persistent_workers=True,

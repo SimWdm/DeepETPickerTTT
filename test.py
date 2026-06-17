@@ -23,6 +23,7 @@ from dataset.dataloader_DynamicLoad import Dataset_ClsBased
 
 def test_func(args, stdout=None):
     args.get_full_seg = getattr(args, "get_full_seg", True)
+    args.save_coords = getattr(args, "save_coords", True)
     if stdout is not None:
         save_stdout = sys.stdout
         save_stderr = sys.stderr
@@ -77,7 +78,7 @@ def test_func(args, stdout=None):
                                 seg_output = self.model.get_segmentation_output(img)
                                 if args.get_full_seg:
                                     out["seg_output"] = seg_output.cpu()
-                            if args.test_use_pad:
+                            if args.save_coords and args.test_use_pad:
                                 mp_num = int(sorted([int(i) for i in cfg["ocp_diameter"].split(',')])[-1] / (args.meanPool_kernel - 1) + 1)
                                 # ensure thresholds is always a list
                                 thresholds = args.threshold if isinstance(args.threshold, (list, tuple)) else [args.threshold]
@@ -119,31 +120,31 @@ def test_func(args, stdout=None):
                             torch.save(full_tomogram, os.path.join(out_dir_tomo, f'{dir_name}.pt'))
                             print(f"Saved full tomogram to {os.path.join(out_dir_tomo, f'{dir_name}.pt')}")
                         
-                        
-                        nms_outputs = {
-                            thresh: torch.cat([o["nms_outputs"][thresh] for o in self._test_epoch_out], dim=0).cpu().numpy()
-                            for thresh in self._test_epoch_out[0]["nms_outputs"].keys()
-                        }
-                        
-                        for thresh, coords_out in nms_outputs.items():
-                            with torch.no_grad():
-                                if args.meanPool_NMS:
-                                    print('coords_out:', coords_out.shape)
-                                    if args.de_duplication:
-                                        centroids = de_dup(coords_out, args)
-                                    out_dir = '/'.join(args.checkpoints.split('/')[:-2]) + f'/{args.out_name}'
-                                    os.makedirs(os.path.join(out_dir, 'Coords_withArea'), exist_ok=True)
-                                    np.savetxt(os.path.join(out_dir, 'Coords_withArea', dir_name + f'_thresh={thresh}' + '.coords'),
-                                            centroids.astype(float),
-                                            fmt='%s',
-                                            delimiter='\t')
+                        if args.save_coords:
+                            nms_outputs = {
+                                thresh: torch.cat([o["nms_outputs"][thresh] for o in self._test_epoch_out], dim=0).cpu().numpy()
+                                for thresh in self._test_epoch_out[0]["nms_outputs"].keys()
+                            }
+                            
+                            for thresh, coords_out in nms_outputs.items():
+                                with torch.no_grad():
+                                    if args.meanPool_NMS:
+                                        print('coords_out:', coords_out.shape)
+                                        if args.de_duplication:
+                                            centroids = de_dup(coords_out, args)
+                                        out_dir = '/'.join(args.checkpoints.split('/')[:-2]) + f'/{args.out_name}'
+                                        os.makedirs(os.path.join(out_dir, 'Coords_withArea'), exist_ok=True)
+                                        np.savetxt(os.path.join(out_dir, 'Coords_withArea', dir_name + f'_thresh={thresh}' + '.coords'),
+                                                centroids.astype(float),
+                                                fmt='%s',
+                                                delimiter='\t')
 
-                                    coords = centroids[:, 0:4]
-                                    os.makedirs(os.path.join(out_dir, 'Coords_All'), exist_ok=True)
-                                    np.savetxt(os.path.join(out_dir, 'Coords_All', dir_name + f'_thresh={thresh}' + '.coords'),
-                                            coords.astype(int),
-                                            fmt='%s',
-                                            delimiter='\t')
+                                        coords = centroids[:, 0:4]
+                                        os.makedirs(os.path.join(out_dir, 'Coords_All'), exist_ok=True)
+                                        np.savetxt(os.path.join(out_dir, 'Coords_All', dir_name + f'_thresh={thresh}' + '.coords'),
+                                                coords.astype(int),
+                                                fmt='%s',
+                                                delimiter='\t')
 
 
                     def test_dataloader(self):
@@ -188,7 +189,7 @@ def test_func(args, stdout=None):
                                 num_work = 8
                             else:
                                 num_work = 16
-                            num_work = 0
+                            num_work = 4
                             test_dataloader = DataLoader(test_dataset,
                                                          shuffle=False,
                                                          batch_size=args.batch_size,

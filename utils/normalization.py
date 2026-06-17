@@ -1,4 +1,4 @@
-from multiprocessing import Pool
+from multiprocessing import Pool, cpu_count
 import mrcfile
 import numpy as np
 import warnings
@@ -7,6 +7,15 @@ import glob
 import sys
 
 warnings.simplefilter('ignore')
+MAX_NORM_WORKERS = 32
+
+
+def _get_pool_size(num_items):
+    if num_items <= 0:
+        return 1
+    return max(1, min(num_items, cpu_count(), MAX_NORM_WORKERS))
+
+
 class InputNorm():
     def __init__(self, tomo_path, tomo_format, base_dir, norm_type):
         self.tomo_path = tomo_path
@@ -51,7 +60,9 @@ class InputNorm():
             print('%d/%d finished.' % (i + 1, len(self.dir_list)))
 
     def handle_parallel(self):
-        with Pool(len(self.dir_list)) as p:
+        pool_size = _get_pool_size(len(self.dir_list))
+        print(f"Using {pool_size} normalization workers for {len(self.dir_list)} tomograms.")
+        with Pool(pool_size) as p:
             p.map(self.single_handle, np.arange(len(self.dir_list)).tolist())
 
 
